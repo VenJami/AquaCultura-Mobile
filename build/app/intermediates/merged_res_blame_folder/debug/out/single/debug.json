@@ -1,0 +1,22 @@
+[
+    {
+        "merged": "com.example.jencap.app-merged_res-42:/drawable_launch_background.xml.flat",
+        "source": "com.example.jencap.app-main-37:/drawable/launch_background.xml"
+    },
+    {
+        "merged": "com.example.jencap.app-merged_res-42:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "com.example.jencap.app-main-37:/mipmap-hdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.example.jencap.app-merged_res-42:/drawable_ic_launcher.xml.flat",
+        "source": "com.example.jencap.app-main-37:/drawable/ic_launcher.xml"
+    },
+    {
+        "merged": "com.example.jencap.app-merged_res-42:/mipmap-anydpi-v26_ic_launcher_foreground.xml.flat",
+        "source": "com.example.jencap.app-main-37:/mipmap-anydpi-v26/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "com.example.jencap.app-merged_res-42:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.example.jencap.app-main-37:/mipmap-anydpi-v26/ic_launcher.xml"
+    }
+]

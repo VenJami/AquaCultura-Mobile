@@ -6,6 +6,9 @@ import '../widgets/custom_app_bar.dart';
 import '../models/task.dart' as task_model;
 import '../providers/auth_provider.dart';
 
+// Enum to represent task filter states
+enum TaskFilter { active, completed, overdue }
+
 class MyTasksScreen extends StatefulWidget {
   const MyTasksScreen({Key? key}) : super(key: key);
 
@@ -13,26 +16,21 @@ class MyTasksScreen extends StatefulWidget {
   State<MyTasksScreen> createState() => _MyTasksScreenState();
 }
 
-class _MyTasksScreenState extends State<MyTasksScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _MyTasksScreenState extends State<MyTasksScreen> {
+  // State for the selected filter
+  Set<TaskFilter> _selectedSegment = {TaskFilter.active};
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-
-    // Load specific task instead of all tasks
+    // Load tasks when the screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Load specific task by ID (the one from MongoDB)
-      Provider.of<TaskProvider>(context, listen: false)
-          .loadSpecificTask(context, "67f2690ba581b9c97005e7d3");
+      Provider.of<TaskProvider>(context, listen: false).loadTasks(context);
     });
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -57,6 +55,8 @@ class _MyTasksScreenState extends State<MyTasksScreen>
             return const Center(child: CircularProgressIndicator());
           }
 
+          final colorScheme = Theme.of(context).colorScheme;
+
           final tasks = taskProvider.tasks;
           final pendingTasks = tasks
               .where((task) => !task.isCompleted && task.status != 'Completed')
@@ -70,29 +70,62 @@ class _MyTasksScreenState extends State<MyTasksScreen>
                   (!task.isCompleted && task.dueDate.isBefore(DateTime.now())))
               .toList();
 
+          // Determine which list to show based on the selected segment
+          final List<task_model.Task> currentList;
+          final TaskFilter currentFilter = _selectedSegment.first;
+          switch (currentFilter) {
+            case TaskFilter.active:
+              currentList = pendingTasks;
+              break;
+            case TaskFilter.completed:
+              currentList = completedTasks;
+              break;
+            case TaskFilter.overdue:
+              currentList = overdueTasks;
+              break;
+          }
+
           return Column(
             children: [
-              Container(
-                color: Theme.of(context).primaryColor,
-                child: TabBar(
-                  controller: _tabController,
-                  indicatorColor: Colors.white,
-                  tabs: [
-                    Tab(text: 'Active (${pendingTasks.length})'),
-                    Tab(text: 'Completed (${completedTasks.length})'),
-                    Tab(text: 'Overdue (${overdueTasks.length})'),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: SegmentedButton<TaskFilter>(
+                  segments: <ButtonSegment<TaskFilter>>[
+                    ButtonSegment<TaskFilter>(
+                        value: TaskFilter.active,
+                        label: Text('Active (${pendingTasks.length})'),
+                        icon: const Icon(Icons.list_alt)),
+                    ButtonSegment<TaskFilter>(
+                        value: TaskFilter.completed,
+                        label: Text('Completed (${completedTasks.length})'),
+                        icon: const Icon(Icons.check_circle)),
+                    ButtonSegment<TaskFilter>(
+                        value: TaskFilter.overdue,
+                        label: Text('Overdue (${overdueTasks.length})'),
+                        icon: const Icon(Icons.warning_amber)),
                   ],
+                  selected: _selectedSegment,
+                  onSelectionChanged: (Set<TaskFilter> newSelection) {
+                    setState(() {
+                      // By default, segmented button clears selection
+                      // if you tap the same segment again. Ensure one segment
+                      // is always selected for this use case.
+                      if (newSelection.isNotEmpty) {
+                        _selectedSegment = newSelection;
+                      }
+                    });
+                  },
+                  style: SegmentedButton.styleFrom(
+                    backgroundColor: colorScheme.surfaceContainer,
+                    foregroundColor: colorScheme.primary,
+                    selectedForegroundColor: colorScheme.onPrimary,
+                    selectedBackgroundColor: colorScheme.primary,
+                  ),
+                  showSelectedIcon: false,
                 ),
               ),
               Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildTaskList(context, pendingTasks),
-                    _buildTaskList(context, completedTasks),
-                    _buildTaskList(context, overdueTasks),
-                  ],
-                ),
+                child: _buildTaskList(context, currentList, currentFilter),
               ),
             ],
           );
@@ -101,29 +134,34 @@ class _MyTasksScreenState extends State<MyTasksScreen>
     );
   }
 
-  Widget _buildTaskList(BuildContext context, List<task_model.Task> tasks) {
+  Widget _buildTaskList(BuildContext context, List<task_model.Task> tasks, TaskFilter filter) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     if (tasks.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _tabController.index == 1
-                  ? Icons.check_circle_outline
-                  : Icons.assignment_outlined,
+              filter == TaskFilter.completed
+                  ? Icons.check_circle_outline_rounded
+                  : filter == TaskFilter.overdue
+                      ? Icons.running_with_errors_rounded // More active icon for overdue
+                      : Icons.inbox_rounded, // Icon for active/empty inbox
               size: 64,
-              color: Colors.grey[400],
+              color: colorScheme.onSurfaceVariant.withOpacity(0.5),
             ),
             const SizedBox(height: 16),
             Text(
-              _tabController.index == 0
+              filter == TaskFilter.active
                   ? 'No active tasks'
-                  : _tabController.index == 1
+                  : filter == TaskFilter.completed
                       ? 'No completed tasks'
                       : 'No overdue tasks',
               style: TextStyle(
                 fontSize: 18,
-                color: Colors.grey[600],
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -136,79 +174,88 @@ class _MyTasksScreenState extends State<MyTasksScreen>
       itemBuilder: (context, index) {
         final task = tasks[index];
         final dueDate = task.dueDate;
-        final isPastDue = dueDate.isBefore(DateTime.now()) &&
-            !task.isCompleted &&
-            task.status != 'Completed';
+        // Determine if overdue based on the filter or date comparison for active tasks
+        final bool isOverdue = filter == TaskFilter.overdue ||
+            (filter == TaskFilter.active &&
+                !task.isCompleted &&
+                task.status != 'Completed' &&
+                dueDate.isBefore(DateTime.now()));
+        final bool isCompleted = task.isCompleted || task.status == 'Completed';
 
         return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          elevation: 2,
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          elevation: 1,
+          color: colorScheme.surfaceContainerHighest, // Slightly different background
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color:
-                  isPastDue ? Colors.red.withOpacity(0.5) : Colors.transparent,
-              width: isPastDue ? 1 : 0,
-            ),
           ),
           child: ListTile(
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             leading: Checkbox(
-              value: task.isCompleted,
+              value: isCompleted,
               onChanged: (value) {
                 if (value != null) {
                   Provider.of<TaskProvider>(context, listen: false)
                       .toggleTaskStatus(context, task.id, value);
                 }
               },
-              shape: CircleBorder(),
+              shape: const CircleBorder(),
+              activeColor: colorScheme.primary,
+              side: BorderSide(color: colorScheme.outline),
             ),
             title: Text(
               task.title,
               style: TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.bold,
-                decoration:
-                    task.isCompleted ? TextDecoration.lineThrough : null,
+                fontWeight: FontWeight.w600, // Slightly bolder
+                decoration: isCompleted ? TextDecoration.lineThrough : null,
+                color: isCompleted ? colorScheme.onSurfaceVariant : colorScheme.onSurface,
               ),
             ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 4),
-                Text(task.description),
+                Text(
+                  task.description,
+                  style: TextStyle(color: colorScheme.onSurfaceVariant),
+                  maxLines: 2, // Limit description lines
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
                     Icon(Icons.calendar_today,
-                        size: 14, color: isPastDue ? Colors.red : Colors.grey),
+                        size: 14,
+                        color: isOverdue ? colorScheme.error : colorScheme.onSurfaceVariant),
                     const SizedBox(width: 4),
                     Text(
                       'Due: ${DateFormat('MMM d, yyyy').format(dueDate)}',
                       style: TextStyle(
-                        color: isPastDue ? Colors.red : Colors.grey[700],
-                        fontWeight:
-                            isPastDue ? FontWeight.bold : FontWeight.normal,
+                        color: isOverdue ? colorScheme.error : colorScheme.onSurfaceVariant,
+                        fontSize: 12,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color:
-                            _getPriorityColor(task.priority).withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        task.priority,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: _getPriorityColor(task.priority),
-                          fontWeight: FontWeight.bold,
+                    const Spacer(), // Push priority to the end
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.circle,
+                          size: 10,
+                          color: _getPriorityColor(task.priority, colorScheme),
                         ),
-                      ),
+                        const SizedBox(width: 4),
+                        Text(
+                          task.priority,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _getPriorityColor(task.priority, colorScheme),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -221,16 +268,16 @@ class _MyTasksScreenState extends State<MyTasksScreen>
     );
   }
 
-  Color _getPriorityColor(String priority) {
+  Color _getPriorityColor(String priority, ColorScheme colorScheme) {
     switch (priority) {
       case 'High':
-        return Colors.red;
+        return colorScheme.error; // Use theme error color
       case 'Medium':
-        return Colors.orange;
+        return colorScheme.tertiary; // Use theme tertiary color (adjust if needed)
       case 'Low':
-        return Colors.green;
+        return colorScheme.primary; // Use theme primary color
       default:
-        return Colors.grey;
+        return colorScheme.onSurfaceVariant; // Default color
     }
   }
 }

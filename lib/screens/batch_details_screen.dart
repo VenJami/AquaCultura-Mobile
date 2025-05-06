@@ -245,16 +245,13 @@ class _BatchDetailsScreenState extends State<BatchDetailsScreen> {
       backgroundColor: Colors.white,
       elevation: 0,
       leading: IconButton(
-        icon: Image.asset('assets/home.png', width: 24, height: 24),
+        icon: const Icon(Icons.arrow_back, color: Colors.blue),
         onPressed: () {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => HomeScreen()),
-          );
+          Navigator.pop(context);
         },
       ),
       title: const Text(
-        'Seedlings Insight',
+        'Batch Details',
         style: TextStyle(
             color: Colors.blue, fontSize: 20, fontWeight: FontWeight.bold),
       ),
@@ -262,7 +259,10 @@ class _BatchDetailsScreenState extends State<BatchDetailsScreen> {
         IconButton(
           icon: Image.asset('assets/notif.png', width: 24, height: 24),
           onPressed: () {
-            Navigator.pushNamed(context, '/notification_page');
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const NotificationScreen()),
+            );
           },
         ),
       ],

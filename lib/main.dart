@@ -6,9 +6,11 @@ import 'providers/batch_provider.dart';
 import 'providers/task_provider.dart';
 import 'providers/seedling_provider.dart';
 import 'providers/transplant_provider.dart';
+import 'providers/theme_provider.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login.dart';
 import 'screens/home.dart';
+import 'screens/main_screen.dart';
 import 'screens/attendance_log_screen.dart';
 import 'screens/batch_details_screen.dart';
 import 'screens/calendar_screen.dart';
@@ -16,7 +18,8 @@ import 'screens/tasks_screen.dart';
 import 'screens/seedling_insights.dart';
 import 'screens/transplant_insights_screen.dart';
 import 'screens/transplant_details_screen.dart';
-import 'config/theme.dart';
+import 'screens/settings_screen.dart';
+import 'screens/change_password_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -35,36 +38,41 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => BatchProvider()),
         ChangeNotifierProvider(create: (_) => TaskProvider()),
         ChangeNotifierProvider(create: (_) => SeedlingProvider()),
+        ChangeNotifierProvider(create: (ctx) => ThemeProvider()),
       ],
       child: Consumer<AuthProvider>(
-        builder: (ctx, auth, _) => MaterialApp(
-          title: 'Jencap',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: ThemeMode.system,
-          home: auth.isAuth
-              ? const HomeScreen()
-              : FutureBuilder(
-                  future: auth.tryAutoLogin(),
-                  builder: (ctx, authResultSnapshot) =>
-                      authResultSnapshot.connectionState ==
-                              ConnectionState.waiting
-                          ? const SplashScreen()
-                          : const LoginPage(),
-                ),
-          routes: {
-            '/login': (context) => const LoginPage(),
-            '/home': (context) => const HomeScreen(),
-            '/attendance': (context) => const AttendanceLogScreen(),
-            '/calendar': (context) => const CalendarScreen(),
-            '/tasks': (context) => const TasksScreen(),
-            '/seedling-insights': (context) => const SeedlingsInsightsScreen(),
-            '/transplant-insights': (context) =>
-                const TransplantInsightsScreen(),
-            '/transplant-details': (context) =>
-                const TransplantDetailsScreen(transplantId: '1'),
-          },
+        builder: (ctx, auth, _) => Consumer<ThemeProvider>(
+          builder: (context, themeProvider, _) => MaterialApp(
+            title: 'AquaCultura',
+            debugShowCheckedModeBanner: false,
+            theme: themeProvider.currentLightTheme,
+            darkTheme: themeProvider.currentDarkTheme,
+            themeMode: themeProvider.themeMode,
+            home: auth.isAuth
+                ? const MainScreen()
+                : FutureBuilder(
+                    future: auth.tryAutoLogin(),
+                    builder: (ctx, authResultSnapshot) =>
+                        authResultSnapshot.connectionState ==
+                                ConnectionState.waiting
+                            ? const SplashScreen()
+                            : const LoginPage(),
+                  ),
+            routes: {
+              '/login': (context) => const LoginPage(),
+              '/home': (context) => const MainScreen(),
+              '/attendance': (context) => const AttendanceLogScreen(),
+              '/calendar': (context) => const CalendarScreen(),
+              '/tasks': (context) => const TasksScreen(),
+              '/seedling-insights': (context) => const SeedlingsInsightsScreen(),
+              '/transplant-insights': (context) =>
+                  const TransplantInsightsScreen(),
+              '/transplant-details': (context) =>
+                  const TransplantDetailsScreen(transplantId: '1'),
+              '/settings': (context) => const SettingsScreen(),
+              '/change-password': (context) => const ChangePasswordScreen(),
+            },
+          ),
         ),
       ),
     );

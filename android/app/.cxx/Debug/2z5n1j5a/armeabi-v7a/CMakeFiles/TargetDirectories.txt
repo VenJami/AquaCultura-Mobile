@@ -1,0 +1,2 @@
+C:/Users/jamin/OneDrive/Desktop/aquacultura-v1/AquaCultura/client/android/app/.cxx/Debug/2z5n1j5a/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/Users/jamin/OneDrive/Desktop/aquacultura-v1/AquaCultura/client/android/app/.cxx/Debug/2z5n1j5a/armeabi-v7a/CMakeFiles/rebuild_cache.dir

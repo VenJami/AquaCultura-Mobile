@@ -1,0 +1,1 @@
+ C:\\Users\\jamin\\OneDrive\\Desktop\\aquacultura-v1\\AquaCultura\\client\\.dart_tool\\flutter_build\\73b0ab81aacd868509a07dfc2ee565da\\native_assets.json: 

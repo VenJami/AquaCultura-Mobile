@@ -1,0 +1,20 @@
+{
+  "buildFiles": [
+    "D:\\Downloads\\flutter\\packages\\flutter_tools\\gradle\\src\\main\\groovy\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\jamin\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\Users\\jamin\\OneDrive\\Desktop\\aquacultura-v1\\AquaCultura\\client\\android\\app\\.cxx\\Debug\\2z5n1j5a\\x86_64",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\jamin\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\Users\\jamin\\OneDrive\\Desktop\\aquacultura-v1\\AquaCultura\\client\\android\\app\\.cxx\\Debug\\2z5n1j5a\\x86_64",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {}
+}

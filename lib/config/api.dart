@@ -3,13 +3,13 @@ class ApiConfig {
   // Uncomment the one that works for your setup:
 
   // For Android Emulator (using 10.0.2.2 to access host machine)
-  // static const String baseUrl = 'http://10.0.2.2:3000/api';
+  static const String baseUrl = 'http://10.0.2.2:3000/api';
 
   // Use your actual server IP address
   // static const String baseUrl = 'http://192.168.1.100:3000/api';
 
   // For local development (web)
-  static const String baseUrl = 'http://localhost:3000/api';
+  // static const String baseUrl = 'http://localhost:3000/api';
 
   // Set to FALSE to ensure we always use real server connection
   static const bool useOfflineMode = false;
