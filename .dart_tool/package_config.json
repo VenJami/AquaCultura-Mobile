@@ -135,7 +135,7 @@
     },
     {
       "name": "flutter_native_splash",
-      "rootUri": "file:///C:/Users/jamin/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_native_splash-2.4.6",
+      "rootUri": "file:///C:/Users/jamin/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_native_splash-2.4.4",
       "packageUri": "lib/",
       "languageVersion": "3.0"
     },
@@ -285,9 +285,9 @@
     },
     {
       "name": "petitparser",
-      "rootUri": "file:///C:/Users/jamin/AppData/Local/Pub/Cache/hosted/pub.dev/petitparser-6.1.0",
+      "rootUri": "file:///C:/Users/jamin/AppData/Local/Pub/Cache/hosted/pub.dev/petitparser-6.0.2",
       "packageUri": "lib/",
-      "languageVersion": "3.5"
+      "languageVersion": "3.2"
     },
     {
       "name": "platform",
@@ -494,7 +494,7 @@
       "languageVersion": "3.0"
     }
   ],
-  "generated": "2025-05-11T07:14:37.138298Z",
+  "generated": "2025-05-22T04:43:20.401399Z",
   "generator": "pub",
   "generatorVersion": "3.7.2",
   "flutterRoot": "file:///D:/Downloads/flutter",
