@@ -1,3 +1,5 @@
+require_relative '../flutter/podhelper'
+
 # Uncomment this line to define a global platform for your project
 platform :ios, '12.0'
 
@@ -11,7 +13,7 @@ target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  flutter_install_all_ios_pods(COCOAPODS_PARALLEL_CODE_SIGN)
 end
 
 post_install do |installer|
