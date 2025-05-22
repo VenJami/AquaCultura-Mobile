@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/transplant_provider.dart';
 import '../services/transplant_service.dart';
+import '../services/seedling_service.dart';
 
 class TransplantDetailsScreen extends StatefulWidget {
   final String transplantId;
@@ -29,17 +30,15 @@ class _TransplantDetailsScreenState extends State<TransplantDetailsScreen> {
   }
 
   Future<void> _loadTransplantDetails() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
+      // Fetch the full CropBatch details using SeedlingService
+      final data = await SeedlingService.getCropBatchByIdRaw(widget.transplantId);
       setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
-
-      final transplant =
-          await TransplantService.getTransplantByIdRaw(widget.transplantId);
-
-      setState(() {
-        _transplant = transplant;
+        _transplant = data; // Assign the fetched CropBatch data
         _isLoading = false;
       });
     } catch (e) {
@@ -256,19 +255,32 @@ class _TransplantDetailsScreenState extends State<TransplantDetailsScreen> {
     try {
       setState(() {
         _isLoading = true;
+        // Consider showing a loading dialog as in BatchDetailsScreen for better UX
       });
 
-      await Provider.of<TransplantProvider>(context, listen: false)
-          .deleteTransplant(context, widget.transplantId);
+      // Directly call SeedlingService to delete the crop batch
+      await SeedlingService.deleteCropBatchRaw(widget.transplantId); // Assuming transplantId is the _id of the CropBatch
 
       if (mounted) {
-        Navigator.pop(context);
+        // Pop this details screen
+        Navigator.pop(context); 
+        // Optionally, show a success message using ScaffoldMessenger
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Transplanted batch deleted successfully'), backgroundColor: Colors.green),
+        );
+        // You might need to trigger a refresh on the previous list screen if it doesn't auto-refresh.
+        // This could be done by passing a callback or using a result from Navigator.pop().
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage = e.toString(); // Display this error in the UI if not already handled
       });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting: ${e.toString()}'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 }

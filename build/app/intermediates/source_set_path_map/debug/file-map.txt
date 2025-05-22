@@ -41,6 +41,7 @@ com.example.jencap.app-resValues-39 C:\Users\jamin\OneDrive\Desktop\aquacultura-
 com.example.jencap.app-packageDebugResources-40 C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\build\app\intermediates\incremental\debug\packageDebugResources\merged.dir
 com.example.jencap.app-packageDebugResources-41 C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\build\app\intermediates\incremental\debug\packageDebugResources\stripped.dir
 com.example.jencap.app-merged_res-42 C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\build\app\intermediates\merged_res\debug
-com.example.jencap.app-packaged_res-43 C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\build\path_provider_android\intermediates\packaged_res\debug
-com.example.jencap.app-packaged_res-44 C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\build\shared_preferences_android\intermediates\packaged_res\debug
-com.example.jencap.app-packaged_res-45 C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\build\video_player_android\intermediates\packaged_res\debug
+com.example.jencap.app-packaged_res-43 C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\build\flutter_native_splash\intermediates\packaged_res\debug
+com.example.jencap.app-packaged_res-44 C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\build\path_provider_android\intermediates\packaged_res\debug
+com.example.jencap.app-packaged_res-45 C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\build\shared_preferences_android\intermediates\packaged_res\debug
+com.example.jencap.app-packaged_res-46 C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\build\video_player_android\intermediates\packaged_res\debug

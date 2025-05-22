@@ -1,0 +1,4 @@
+build/
+android/*.hprof
+android/.gradle/**/*.bin
+android/.gradle/**/*.lock 

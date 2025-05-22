@@ -1,23 +1,48 @@
 import 'package:flutter/material.dart';
-import '../services/transplant_service.dart';
+import '../services/seedling_service.dart';
 
-/// Provider class for managing transplant-related state
-/// Uses raw JSON data from the server API to avoid model coupling
+/// Provider class for managing the state of transplanted crop batches.
+/// It fetches crop batches with 'transplanted' status using SeedlingService.
 class TransplantProvider with ChangeNotifier {
-  List<dynamic> _transplants = [];
+  List<dynamic> _transplantedCropBatches = [];
   bool _isLoading = false;
 
-  List<dynamic> get transplants => _transplants;
+  List<dynamic> get transplantedCropBatches => _transplantedCropBatches;
   bool get isLoading => _isLoading;
 
-  /// Loads all transplants for the authenticated user
-  Future<void> loadTransplants(BuildContext context) async {
+  void _sortTransplantedCropBatches() {
+    _transplantedCropBatches.sort((a, b) {
+      final dateAString = a['transplantDetails']?['expectedHarvestDate'];
+      final dateBString = b['transplantDetails']?['expectedHarvestDate'];
+
+      final dateA = dateAString != null ? DateTime.tryParse(dateAString) : null;
+      final dateB = dateBString != null ? DateTime.tryParse(dateBString) : null;
+
+      if (dateA == null && dateB == null) return 0;
+      if (dateA == null) return 1; // Place nulls at the end
+      if (dateB == null) return -1; // Place nulls at the end
+
+      // Prioritize today's date
+      final now = DateTime.now();
+      final todayA = dateA.year == now.year && dateA.month == now.month && dateA.day == now.day;
+      final todayB = dateB.year == now.year && dateB.month == now.month && dateB.day == now.day;
+
+      if (todayA && !todayB) return -1;
+      if (!todayA && todayB) return 1;
+
+      return dateA.compareTo(dateB);
+    });
+  }
+
+  /// Loads all crop batches with 'transplanted' status for the authenticated user
+  Future<void> loadTransplantedCropBatches(BuildContext context) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final transplants = await TransplantService.getAllTransplantsRaw();
-      _transplants = transplants;
+      final batches = await SeedlingService.getAllCropBatchesRaw(status: 'transplanted');
+      _transplantedCropBatches = batches;
+      _sortTransplantedCropBatches();
 
       _isLoading = false;
       notifyListeners();
@@ -28,126 +53,18 @@ class TransplantProvider with ChangeNotifier {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading transplants: ${e.toString()}'),
+            content: Text('Error loading transplanted batches: ${e.toString()}'),
+            backgroundColor: Colors.red,
           ),
         );
       }
     }
   }
 
-  /// Creates a new transplant with the provided data
-  Future<void> createTransplant(
-    BuildContext context,
-    Map<String, dynamic> transplantData,
-  ) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      final newTransplant =
-          await TransplantService.createTransplantRaw(transplantData);
-      _transplants.add(newTransplant);
-
-      _isLoading = false;
-      notifyListeners();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Transplant created successfully'),
-          ),
-        );
-      }
-    } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error creating transplant: ${e.toString()}'),
-          ),
-        );
-      }
-    }
-  }
-
-  /// Updates an existing transplant with new data
-  Future<void> updateTransplant(
-    BuildContext context,
-    String id,
-    Map<String, dynamic> transplantData,
-  ) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      final updatedTransplant =
-          await TransplantService.updateTransplantRaw(id, transplantData);
-
-      // Update the transplant in the local list
-      final index =
-          _transplants.indexWhere((transplant) => transplant['_id'] == id);
-      if (index != -1) {
-        _transplants[index] = updatedTransplant;
-      }
-
-      _isLoading = false;
-      notifyListeners();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Transplant updated successfully'),
-          ),
-        );
-      }
-    } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating transplant: ${e.toString()}'),
-          ),
-        );
-      }
-    }
-  }
-
-  /// Deletes a transplant from the server
-  Future<void> deleteTransplant(BuildContext context, String id) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      await TransplantService.deleteTransplant(id);
-
-      // Remove the transplant from the local list
-      _transplants.removeWhere((transplant) => transplant['_id'] == id);
-
-      _isLoading = false;
-      notifyListeners();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Transplant deleted successfully'),
-          ),
-        );
-      }
-    } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error deleting transplant: ${e.toString()}'),
-          ),
-        );
-      }
-    }
+  /// Optionally, a method to clear data or refresh could be added here if needed.
+  void clearTransplantedBatches() {
+    _transplantedCropBatches = [];
+    _sortTransplantedCropBatches();
+    notifyListeners();
   }
 }

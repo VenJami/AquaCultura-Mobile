@@ -7,12 +7,14 @@ import 'providers/task_provider.dart';
 import 'providers/seedling_provider.dart';
 import 'providers/transplant_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/due_items_notification_provider.dart';
+import 'providers/main_screen_tab_provider.dart';
+import 'providers/general_notification_provider.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login.dart';
 import 'screens/home.dart';
 import 'screens/main_screen.dart';
 import 'screens/attendance_log_screen.dart';
-import 'screens/batch_details_screen.dart';
 import 'screens/calendar_screen.dart';
 import 'screens/tasks_screen.dart';
 import 'screens/seedling_insights.dart';
@@ -39,6 +41,13 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TaskProvider()),
         ChangeNotifierProvider(create: (_) => SeedlingProvider()),
         ChangeNotifierProvider(create: (ctx) => ThemeProvider()),
+        ChangeNotifierProvider(create: (ctx) => DueItemsNotificationProvider()),
+        ChangeNotifierProvider(create: (ctx) => MainScreenTabProvider()),
+        ChangeNotifierProxyProvider<AuthProvider, GeneralNotificationProvider>(
+          create: (ctx) => GeneralNotificationProvider(null),
+          update: (ctx, auth, previousGeneralNotifications) =>
+              GeneralNotificationProvider(auth),
+        ),
       ],
       child: Consumer<AuthProvider>(
         builder: (ctx, auth, _) => Consumer<ThemeProvider>(

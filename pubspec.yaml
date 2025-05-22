@@ -25,12 +25,15 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: "^0.13.1"
+  flutter_native_splash: ^2.3.0 # Or latest version
 
 flutter:
   uses-material-design: true
 
   assets:
     - assets/
+    - assets/logos/
     - assets/icon.png
     - assets/notif.png
     - assets/ed.png
@@ -52,3 +55,21 @@ flutter:
     - assets/eye.png
     - assets/view.png
     - assets/cogwheel.png
+
+flutter_icons:
+  android: true
+  ios: false
+  image_path: "assets/logos/aclogo.png"
+  adaptive_icon_foreground: "assets/logos/aclogo.png"
+  adaptive_icon_background: "#FFFFFF"
+  remove_alpha_ios: true
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/logos/aclogo.png
+  android: true
+  ios: true # Set to false if you don't want to generate for iOS initially
+  # You can add more platform-specific configurations if needed
+  # android_12:
+  #   image: assets/logos/aclogo_android12.png
+  #   color: "#FFFFFF"

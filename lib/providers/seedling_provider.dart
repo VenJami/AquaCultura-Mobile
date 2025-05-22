@@ -4,25 +4,47 @@ import 'package:http/http.dart' as http;
 import '../config/api.dart';
 import '../services/seedling_service.dart';
 
-/// SeedlingProvider manages the state of seedlings in the application.
+/// SeedlingProvider manages the state of crop batches, particularly those with 'seedling' status.
 /// It communicates with the server API through SeedlingService to perform CRUD operations.
 /// The provider works directly with raw JSON data from the server, which includes virtual fields
 /// calculated on the server side such as batchName, daysSincePlanting, and estimatedHeight.
 class SeedlingProvider with ChangeNotifier {
-  List<dynamic> _seedlings = [];
+  List<dynamic> _cropBatches = [];
   bool _isLoading = false;
 
-  List<dynamic> get seedlings => _seedlings;
+  List<dynamic> get cropBatches => _cropBatches;
   bool get isLoading => _isLoading;
 
-  /// Loads all seedlings for the authenticated user
-  Future<void> loadSeedlings(BuildContext context) async {
+  void _sortCropBatches() {
+    _cropBatches.sort((a, b) {
+      final dateA = a['expectedTransplantDate'] != null ? DateTime.tryParse(a['expectedTransplantDate']) : null;
+      final dateB = b['expectedTransplantDate'] != null ? DateTime.tryParse(b['expectedTransplantDate']) : null;
+
+      if (dateA == null && dateB == null) return 0;
+      if (dateA == null) return 1; // Place nulls at the end
+      if (dateB == null) return -1; // Place nulls at the end
+
+      // Prioritize today's date
+      final now = DateTime.now();
+      final todayA = dateA.year == now.year && dateA.month == now.month && dateA.day == now.day;
+      final todayB = dateB.year == now.year && dateB.month == now.month && dateB.day == now.day;
+
+      if (todayA && !todayB) return -1;
+      if (!todayA && todayB) return 1;
+
+      return dateA.compareTo(dateB);
+    });
+  }
+
+  /// Loads crop batches with 'seedling' status for the authenticated user
+  Future<void> loadSeedlingCropBatches(BuildContext context) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final seedlings = await SeedlingService.getAllSeedlingsRaw();
-      _seedlings = seedlings;
+      final batches = await SeedlingService.getAllCropBatchesRaw(status: 'seedling');
+      _cropBatches = batches;
+      _sortCropBatches();
 
       _isLoading = false;
       notifyListeners();
@@ -33,37 +55,34 @@ class SeedlingProvider with ChangeNotifier {
     }
   }
 
-  /// Creates a new seedling with the provided data
-  Future<void> createSeedling(
+  /// Creates a new crop batch (defaults to 'seedling' status on backend)
+  Future<void> createCropBatch(
     BuildContext context, {
     required String batchCode,
     required String plantType,
     required String healthStatus,
     required String notes,
     required DateTime plantedDate,
-    int germination = 0,
-    double pHLevel = 6.0,
-    double temperature = 25.0,
-    double growthRate = 1.0,
+    required int quantity,
+    DateTime? expectedTransplantDate,
   }) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final seedlingData = {
+      final cropBatchData = {
         'batchCode': batchCode,
         'plantType': plantType,
         'healthStatus': healthStatus,
         'notes': notes,
         'plantedDate': plantedDate.toIso8601String(),
-        'germination': germination,
-        'pHLevel': pHLevel,
-        'temperature': temperature,
-        'growthRate': growthRate,
+        'quantity': quantity,
+        if (expectedTransplantDate != null) 'expectedTransplantDate': expectedTransplantDate.toIso8601String(),
       };
 
-      final newSeedling = await SeedlingService.createSeedlingRaw(seedlingData);
-      _seedlings.add(newSeedling);
+      final newCropBatch = await SeedlingService.createCropBatchRaw(cropBatchData);
+      _cropBatches.add(newCropBatch);
+      _sortCropBatches();
 
       _isLoading = false;
       notifyListeners();
@@ -74,8 +93,8 @@ class SeedlingProvider with ChangeNotifier {
     }
   }
 
-  /// Updates an existing seedling with the provided data
-  Future<void> updateSeedling(
+  /// Updates an existing crop batch
+  Future<void> updateCropBatch(
     BuildContext context,
     String id, {
     required String batchCode,
@@ -83,33 +102,30 @@ class SeedlingProvider with ChangeNotifier {
     required String healthStatus,
     required String notes,
     required DateTime plantedDate,
-    required int germination,
-    required double pHLevel,
-    required double temperature,
-    required double growthRate,
+    required int quantity,
+    DateTime? expectedTransplantDate,
   }) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      final seedlingData = {
+      final cropBatchData = {
         'batchCode': batchCode,
         'plantType': plantType,
         'healthStatus': healthStatus,
         'notes': notes,
         'plantedDate': plantedDate.toIso8601String(),
-        'germination': germination,
-        'pHLevel': pHLevel,
-        'temperature': temperature,
-        'growthRate': growthRate,
+        'quantity': quantity,
+        if (expectedTransplantDate != null) 'expectedTransplantDate': expectedTransplantDate.toIso8601String(),
       };
 
-      final updatedSeedling =
-          await SeedlingService.updateSeedlingRaw(id, seedlingData);
-      final index = _seedlings.indexWhere((s) => s['_id'] == id);
+      final updatedCropBatch =
+          await SeedlingService.updateCropBatchRaw(id, cropBatchData);
+      final index = _cropBatches.indexWhere((s) => s['_id'] == id);
       if (index != -1) {
-        _seedlings[index] = updatedSeedling;
+        _cropBatches[index] = updatedCropBatch;
       }
+      _sortCropBatches();
 
       _isLoading = false;
       notifyListeners();
@@ -120,14 +136,15 @@ class SeedlingProvider with ChangeNotifier {
     }
   }
 
-  /// Deletes a seedling by its ID
-  Future<void> deleteSeedling(BuildContext context, String id) async {
+  /// Deletes a crop batch by its ID
+  Future<void> deleteCropBatch(BuildContext context, String id) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      await SeedlingService.deleteSeedlingRaw(id);
-      _seedlings.removeWhere((s) => s['_id'] == id);
+      await SeedlingService.deleteCropBatchRaw(id);
+      _cropBatches.removeWhere((s) => s['_id'] == id);
+      _sortCropBatches();
 
       _isLoading = false;
       notifyListeners();
@@ -138,9 +155,11 @@ class SeedlingProvider with ChangeNotifier {
     }
   }
 
-  /// Updates the seedlings list directly without making an API call
-  void updateSeedlings(List<dynamic> seedlings) {
-    _seedlings = seedlings;
+  /// Updates the crop batches list directly without making an API call
+  /// This is used by seedling_insights_screen.dart
+  void updateCropBatchesList(List<dynamic> batches) {
+    _cropBatches = batches;
+    _sortCropBatches();
     notifyListeners();
   }
 }

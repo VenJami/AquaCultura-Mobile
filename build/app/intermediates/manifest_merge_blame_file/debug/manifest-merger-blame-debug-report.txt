@@ -33,10 +33,10 @@
 22-->[androidx.core:core:1.13.1] C:\Users\jamin\.gradle\caches\transforms-3\7ef145b64b20d89b2336365ad6d06f2e\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
 23        android:debuggable="true"
 24        android:extractNativeLibs="true"
-25        android:icon="@drawable/ic_launcher"
-25-->C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\android\app\src\main\AndroidManifest.xml:7:9-45
-26        android:label="Jencap" >
-26-->C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\android\app\src\main\AndroidManifest.xml:5:9-31
+25        android:icon="@mipmap/ic_launcher"
+25-->C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\android\app\src\main\AndroidManifest.xml:7:9-43
+26        android:label="AquaCultura" >
+26-->C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\android\app\src\main\AndroidManifest.xml:5:9-36
 27        <activity
 27-->C:\Users\jamin\OneDrive\Desktop\aquacultura-v1\AquaCultura\client\android\app\src\main\AndroidManifest.xml:8:9-24:20
 28            android:name="com.example.jencap.MainActivity"

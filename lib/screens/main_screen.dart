@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/due_items_notification_provider.dart';
+import '../providers/main_screen_tab_provider.dart';
 import 'home.dart';
 import 'seedling_insights.dart';
 import 'my_task_screen.dart';
 import 'calendar_screen.dart';
-import 'batch_details_screen.dart';
+// import 'batch_details_screen.dart'; // Removed import for deleted file
 import 'notification_page.dart';
 
 class MainScreen extends StatefulWidget {
@@ -14,15 +17,10 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _selectedIndex = 0;
-
-  // GlobalKeys for Navigator states
   final GlobalKey<NavigatorState> _homeNavigatorKey = GlobalKey<NavigatorState>();
   final GlobalKey<NavigatorState> _insightsNavigatorKey = GlobalKey<NavigatorState>();
   final GlobalKey<NavigatorState> _tasksNavigatorKey = GlobalKey<NavigatorState>();
   final GlobalKey<NavigatorState> _calendarNavigatorKey = GlobalKey<NavigatorState>();
-
-  // List of navigator keys
   late final List<GlobalKey<NavigatorState>> _navigatorKeys;
 
   @override
@@ -34,17 +32,19 @@ class _MainScreenState extends State<MainScreen> {
       _tasksNavigatorKey,
       _calendarNavigatorKey,
     ];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<DueItemsNotificationProvider>(context, listen: false).loadDueItemsNotifications();
+      final tabProvider = Provider.of<MainScreenTabProvider>(context, listen: false);
+      if (tabProvider.navigationArguments != null) {
+        _handleTabNavigationArguments(tabProvider.selectedIndex, tabProvider.navigationArguments);
+        tabProvider.clearNavigationArguments();
+      }
+    });
   }
 
-  void _onItemTapped(int index) {
-    if (_selectedIndex == index) {
-      // If the current tab is tapped again, pop to its first route
-      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
-    } else {
-      // Switch tab
-      setState(() {
-        _selectedIndex = index;
-      });
+  void _handleTabNavigationArguments(int tabIndex, dynamic args) {
+    if (tabIndex == 2 && args is Map && args.containsKey('taskId')) {
+        print('[MainScreen] Should navigate to Tasks tab with taskId: ${args['taskId']}');
     }
   }
 
@@ -52,27 +52,24 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final tabProvider = Provider.of<MainScreenTabProvider>(context);
+    final currentSelectedIndex = tabProvider.selectedIndex;
 
-    // WillPopScope handles the Android back button
     return WillPopScope(
       onWillPop: () async {
-        // Check if the current navigator can pop
-        final NavigatorState? currentNavigator = _navigatorKeys[_selectedIndex].currentState;
+        final NavigatorState? currentNavigator = _navigatorKeys[currentSelectedIndex].currentState;
         if (currentNavigator != null && currentNavigator.canPop()) {
           currentNavigator.pop();
-          return false; // Prevent default back button behavior (closing app)
+          return false; 
         }
-        // If the current navigator can't pop, allow default behavior (close app)
-        // Allow pop only if on the first tab (Home) and its navigator cannot pop
-        return _selectedIndex == 0; 
+        return currentSelectedIndex == 0;
       },
       child: Scaffold(
-        // AppBar removed from here - each screen in nested Navigators should have its own if needed
         body: IndexedStack(
-          index: _selectedIndex,
+          index: currentSelectedIndex,
           children: List.generate(_navigatorKeys.length, (index) {
-            // Use the _buildOffstageNavigator helper
-            return _buildOffstageNavigator(index); 
+            dynamic initialRouteArgs = (index == currentSelectedIndex) ? tabProvider.navigationArguments : null;
+            return _buildOffstageNavigator(index, initialRouteArgs);
           }),
         ),
         bottomNavigationBar: BottomNavigationBar(
@@ -94,87 +91,76 @@ class _MainScreenState extends State<MainScreen> {
               label: 'Calendar',
             ),
           ],
-          currentIndex: _selectedIndex,
-          selectedItemColor: colorScheme.primary, // Use theme primary color
-          unselectedItemColor: theme.unselectedWidgetColor, // Use theme unselected color
-          showUnselectedLabels: true, // Show labels for inactive tabs
-          onTap: _onItemTapped,
-          type: BottomNavigationBarType.fixed, // Ensures all items are visible
+          currentIndex: currentSelectedIndex,
+          selectedItemColor: Theme.of(context).colorScheme.primary,
+          unselectedItemColor: Theme.of(context).unselectedWidgetColor,
+          showUnselectedLabels: true,
+          onTap: (index) {
+            if (currentSelectedIndex == index) {
+              _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+            } else {
+              tabProvider.selectTab(index, arguments: null);
+            }
+          },
+          type: BottomNavigationBarType.fixed,
         ),
       ),
     );
   }
 
-  // Builds a Navigator for a specific tab index
-  Widget _buildOffstageNavigator(int index) {
-    // Get the route map for the current index
+  Widget _buildOffstageNavigator(int index, dynamic initialRouteArguments) {
     var routeMap = _getRoutesForIndex(index); 
+    String initialRouteName = '/';
+
     return Navigator(
       key: _navigatorKeys[index],
-      initialRoute: '/', // Standard initial route name
+      initialRoute: initialRouteName,
       onGenerateRoute: (routeSettings) {
-        // Find the builder for the requested route name
-        final pageBuilder = routeMap[routeSettings.name];
+        RouteSettings settingsToUse = routeSettings;
+        if (routeSettings.name == initialRouteName && initialRouteArguments != null) {
+          settingsToUse = RouteSettings(
+            name: routeSettings.name,
+            arguments: initialRouteArguments,
+          );
+          Provider.of<MainScreenTabProvider>(context, listen: false).clearNavigationArguments();
+        }
+
+        final pageBuilder = routeMap[settingsToUse.name ?? initialRouteName];
         if (pageBuilder != null) {
           return MaterialPageRoute(
-            settings: routeSettings, // Pass settings for arguments, etc.
+            settings: settingsToUse, 
             builder: (context) => pageBuilder(context),
           );
         }
-        // Handle unknown routes: default to the root screen of the tab
         return MaterialPageRoute(
-          settings: routeSettings, 
-          builder: (context) => routeMap['/']!(context) // Go to root if route unknown
+          settings: settingsToUse,
+          builder: (context) => routeMap[initialRouteName]!(context)
         );
       },
     );
   }
 
-  // Helper to get the route map for a given tab index
   Map<String, WidgetBuilder> _getRoutesForIndex(int index) {
     switch (index) {
       case 0: // Home Tab
         return {
           '/': (context) => const HomeScreen(),
-          '/batchDetails': (context) => _buildBatchDetails(context),
           '/notification_page': (context) => const NotificationScreen(),
-          // Add other routes accessible from Home tab
         };
       case 1: // Insights Tab
         return {
           '/': (context) => const SeedlingsInsightsScreen(),
-          '/batchDetails': (context) => _buildBatchDetails(context),
-          // Add other routes accessible from Insights tab
         };
       case 2: // Tasks Tab
         return {
           '/': (context) => const MyTasksScreen(),
-          // Add other routes accessible from Tasks tab
         };
       case 3: // Calendar Tab
         return {
           '/': (context) => const CalendarScreen(),
-          // Add other routes accessible from Calendar tab
         };
       default:
-        // Return a default empty route map or error screen builder
         return {'/': (context) => const Center(child: Text('Unknown Tab'))};
     }
-  }
-
-  // Helper to build BatchDetailsScreen, handling arguments
-  Widget _buildBatchDetails(BuildContext context) {
-      final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
-      final seedlingId = args?['seedlingId'] as String?;
-      if (seedlingId == null) {
-        // Handle missing argument - pop back or show error
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (Navigator.canPop(context)) {
-            Navigator.pop(context);
-          } 
-        });
-        return const Scaffold(body: Center(child: Text("Error: Missing seedlingId")));
-      }
-      return BatchDetailsScreen(seedlingId: seedlingId);
   }
 } 

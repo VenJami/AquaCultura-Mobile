@@ -30,14 +30,14 @@ class Palette {
 }
 
 class ThemeProvider with ChangeNotifier {
-  int _selectedPaletteIndex = 0;
+  int _selectedPaletteIndex = 0; // Default to the blue theme
   ThemeMode _themeMode = ThemeMode.system; // Default to system
 
   int get selectedPaletteIndex => _selectedPaletteIndex;
   ThemeMode get themeMode => _themeMode;
 
   final List<Palette> _palettes = [
-    _createPalette1(),
+    _createBlueTheme(), // Blue theme first (default)
     _createPalette2(),
     _createPalette3(),
   ];
@@ -58,10 +58,10 @@ class ThemeProvider with ChangeNotifier {
 
   // --- Palette Definitions ---
 
-  static Palette _createPalette1() {
-    const primaryColor = Color(0xFF2E7D32); // Deep Green
-    const secondaryColor = Color(0xFF00796B); // Teal
-    const accentColor = Color(0xFF66BB6A); // Lighter Green
+  static Palette _createBlueTheme() {
+    const primaryColor = Color(0xFF4CA6E9); // Blue
+    const secondaryColor = Color(0xFF2E8FDD); // Darker Blue
+    const accentColor = Color(0xFFA1C9F0); // Lighter Blue
 
     final lightTheme = ThemeData(
       brightness: Brightness.light,
@@ -86,7 +86,7 @@ class ThemeProvider with ChangeNotifier {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: accentColor, // Use accent for buttons
+          backgroundColor: primaryColor, // Use primary for buttons
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -130,7 +130,7 @@ class ThemeProvider with ChangeNotifier {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: accentColor, // Use accent for buttons
+          backgroundColor: primaryColor, // Use primary for buttons
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -140,7 +140,7 @@ class ThemeProvider with ChangeNotifier {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: accentColor), // Use accent for focus
+          borderSide: const BorderSide(color: primaryColor), // Use primary for focus
         ),
       ),
       cardTheme: CardTheme(
@@ -151,10 +151,10 @@ class ThemeProvider with ChangeNotifier {
       dividerColor: Colors.grey.shade700,
     );
 
-    return Palette(lightTheme: lightTheme, darkTheme: darkTheme, name: "Modern Teal & Green");
+    return Palette(lightTheme: lightTheme, darkTheme: darkTheme, name: "Modern Blue");
   }
 
-   static Palette _createPalette2() {
+  static Palette _createPalette2() {
     const primaryColor = Color(0xFF558B2F); // Olive Green
     const secondaryColor = Color(0xFFA1887F); // Muted Brown/Taupe
     const accentColor = Color(0xFF8BC34A); // Brighter Light Green

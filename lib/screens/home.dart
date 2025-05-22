@@ -1,23 +1,22 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/seedling_provider.dart';
 import '../providers/task_provider.dart';
 import '../providers/theme_provider.dart';
-import '../config/api.dart';
+import '../providers/due_items_notification_provider.dart';
+import '../providers/general_notification_provider.dart';
 import 'notification_page.dart';
-import 'attendance_log_screen.dart';
 import 'my_task_screen.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'calendar_screen.dart';
 import 'seedling_insights.dart';
 import '../services/seedling_service.dart';
 import 'package:intl/intl.dart';
-import 'batch_details_screen.dart';
-import '../models/task.dart' as task_model;
 import 'settings_screen.dart';
 import 'package:fl_chart/fl_chart.dart';
-// import 'notification.dart';
+import 'transplant_crop_insight.dart';
+import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -38,36 +37,47 @@ class _HomeScreenState extends State<HomeScreen> {
   List<dynamic> _seedlings = [];
   bool _isLoadingSeedlings = true;
 
+  // Revised state variables for Transplant Insight (summary of transplanted batches)
+  List<dynamic> _transplantedBatchesSummary = [];
+  bool _isLoadingTransplantInsights = true;
+
+  // State variables for Survival Rate Analytics
+  bool _isLoadingSurvivalRates = true;
+  double? _avgSeedlingToTransplantSurvivalRate;
+  double? _avgTransplantToHarvestSurvivalRate;
+  double? _avgOverallSurvivalRate;
+  List<FlSpot> _seedlingToTransplantSurvivalHistoryData = [];
+  List<FlSpot> _transplantToHarvestSurvivalHistoryData = [];
+  List<FlSpot> _overallSurvivalHistoryData = [];
+
   // Cache for expensive calculations
-  String? _cachedTemperature;
-  String? _cachedTemperatureStatus;
-  String? _cachedPHLevel;
-  String? _cachedPHLevelStatus;
   String? _cachedSeedlingAge;
   String? _cachedSeedlingAgeStatus;
-  String? _cachedGermination;
-  String? _cachedGerminationStatus;
+
+    // Add state for latest readings
+  bool _isLoadingReading = true;
+  double? _latestTemperature;
+  double? _latestPh;
+  List<FlSpot> _tempChartData = [];
+  List<FlSpot> _phChartData = [];
+  Timer? _refreshTimer;
+  
+  // Cache for survival rate analytics
+  double? _cachedAvgSeedlingToTransplantSurvivalRate;
+  String? _cachedSeedlingToTransplantSurvivalStatus; // e.g., "Avg. Rate"
+  double? _cachedAvgTransplantToHarvestSurvivalRate;
+  String? _cachedTransplantToHarvestSurvivalStatus;
+  double? _cachedAvgOverallSurvivalRate;
+  String? _cachedOverallSurvivalStatus;
+  List<FlSpot> _cachedSeedlingToTransplantSurvivalHistoryData = [];
+  List<FlSpot> _cachedTransplantToHarvestSurvivalHistoryData = [];
+  List<FlSpot> _cachedOverallSurvivalHistoryData = [];
+
+  // Add state for last pump message
+  String? _lastPumpMessage;
+  String? _minutesAgo;
 
   // --- Placeholder Chart Data ---
-  final List<FlSpot> _tempChartData = [
-    const FlSpot(0, 24),
-    const FlSpot(1, 25),
-    const FlSpot(2, 26),
-    const FlSpot(3, 25),
-    const FlSpot(4, 24),
-    const FlSpot(5, 25),
-    const FlSpot(6, 26),
-  ];
-
-  final List<FlSpot> _phChartData = [
-    const FlSpot(0, 6.0),
-    const FlSpot(1, 6.1),
-    const FlSpot(2, 6.2),
-    const FlSpot(3, 6.1),
-    const FlSpot(4, 6.0),
-    const FlSpot(5, 6.1),
-    const FlSpot(6, 6.2),
-  ];
 
   final List<FlSpot> _nutrientChartData = [
     const FlSpot(0, 4),
@@ -78,112 +88,569 @@ class _HomeScreenState extends State<HomeScreen> {
     const FlSpot(5, 5),
     const FlSpot(6, 6),
   ];
-
-  final List<FlSpot> _germinationChartData = [
-    const FlSpot(0, 80),
-    const FlSpot(1, 82),
-    const FlSpot(2, 83),
-    const FlSpot(3, 81),
-    const FlSpot(4, 82),
-    const FlSpot(5, 84),
-    const FlSpot(6, 83),
-  ];
   // --- End Placeholder Data ---
 
   @override
   void initState() {
     super.initState();
-    _refreshHomeScreenData(); // Load initial data
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshHomeScreenData();
+      Provider.of<GeneralNotificationProvider>(context, listen: false).fetchNotifications();
+      Provider.of<DueItemsNotificationProvider>(context, listen: false).loadDueItemsNotifications();
+      
+      // Start polling for the latest readings
+      _fetchLatestReadings();
+          _refreshTimer = Timer.periodic(Duration(seconds: 5), (_) {
+      _fetchLatestReadings();
+      });
+    });
+  }
 
-    // Load tasks when the screen is initialized (Keep for potential future use)
-    // WidgetsBinding.instance.addPostFrameCallback((_) {
-    //   Provider.of<TaskProvider>(context, listen: false)
-    //       .loadSpecificTask(context, "67f2690ba581b9c97005e7d3");
-    // });
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchLatestReadings() async {
+    setState(() {
+      _isLoadingReading = true;
+    });
+
+    try {
+      // Fetch the latest readings
+      final Map<String, dynamic> waterReadings = await ApiService.getLatestReadings();
+      print('Water Readings: $waterReadings'); // Debug: Log the water readings
+
+      // Extract the timestamp from the readings
+      DateTime? lastPumpOnTime;
+      if (waterReadings['timestamp'] != null) {
+        lastPumpOnTime = DateTime.parse(waterReadings['timestamp']).toLocal(); // Get the timestamp
+        print('Last Pump On Time: $lastPumpOnTime'); // Debug: Log the last pump time
+      }
+
+      // Check if the readings have changed
+      if (waterReadings.isNotEmpty) {
+        setState(() {
+          double currentTime = DateTime.now().millisecondsSinceEpoch.toDouble();
+          double temperature = waterReadings['temperature']?.toDouble() ?? 0.0;
+          double ph = waterReadings['ph']?.toDouble() ?? 0.0;
+
+          // Add new readings to the chart data
+          _tempChartData.add(FlSpot(currentTime, temperature));
+          _phChartData.add(FlSpot(currentTime, ph));
+
+          // Keep only the latest 7 readings
+          if (_tempChartData.length > 7) {
+            _tempChartData.removeAt(0); // Remove the oldest reading
+          }
+          if (_phChartData.length > 7) {
+            _phChartData.removeAt(0); // Remove the oldest reading
+          }
+
+          // Update the latest values
+          _latestTemperature = temperature;
+          _latestPh = ph;
+
+          // Update the last pump time display with formatted timestamp
+          if (lastPumpOnTime != null) {
+            String formattedTime = DateFormat('MMM d, yyyy, h:mm a').format(lastPumpOnTime); // Format the timestamp
+            final duration = DateTime.now().difference(lastPumpOnTime);
+            String relativeTime = duration.inMinutes > 0 ? '${duration.inMinutes} minutes ago' : 'Just now';
+            _lastPumpMessage = '$formattedTime';
+            _minutesAgo = '$relativeTime'; // Combine formatted time and relative time
+          } else {
+            _lastPumpMessage = 'Never'; // Or some default message
+          }
+        });
+      }
+      _isLoadingReading = false;
+    } catch (e) {
+      print('Error fetching water readings: $e');
+      setState(() {
+        _isLoadingReading = false;
+      });
+    }
   }
 
   Future<void> _refreshHomeScreenData() async {
     setState(() {
       _isLoadingSeedlings = true;
-      // Consider adding a separate isLoadingTasks if needed for granular feedback
+      _isLoadingTransplantInsights = true; 
+      _isLoadingSurvivalRates = true;
+      _isLoadingReading = true;
     });
 
     try {
-      // Fetch seedlings and tasks concurrently
+      // Fetch seedlings, transplanted summary, and tasks concurrently
       final results = await Future.wait([
         _fetchSeedlings(),
+        _fetchTransplantedBatchesSummary(), // Fetch summary of transplanted batches
         _fetchTasks(),
+        _fetchBatchDataForAnalytics(), // Fetch all data for survival analytics
+        _fetchLatestReadings(),
       ]);
 
-      // Update state after both fetches are complete
-      final fetchedSeedlings = results[0] as List<dynamic>?; // Result from _fetchSeedlings
+      final fetchedSeedlings = results[0] as List<dynamic>?;
+      final fetchedTransplantedSummary = results[1] as List<dynamic>?; // Result from new method
+      final allBatchesForAnalytics = results[3] as List<dynamic>?; // Result for survival analytics
 
       setState(() {
         _seedlings = fetchedSeedlings ?? [];
         _isLoadingSeedlings = false;
-        // Update cache only if seedlings were fetched
         if (fetchedSeedlings != null) {
           _updateCalculationCache();
+          // _updateTransplantInsights(); // This method is removed/replaced by direct fetch
         }
+        
+        _transplantedBatchesSummary = fetchedTransplantedSummary ?? [];
+        _isLoadingTransplantInsights = false;
+
+        if (allBatchesForAnalytics != null) {
+          _calculateSurvivalRateAnalytics(allBatchesForAnalytics);
+        }
+        _isLoadingSurvivalRates = false;
       });
 
     } catch (e) {
-      // print('Error refreshing home screen data: $e'); // TODO: Add proper error handling
       setState(() {
         _seedlings = [];
         _isLoadingSeedlings = false;
+        _transplantedBatchesSummary = [];
+        _isLoadingTransplantInsights = false;
+        _isLoadingSurvivalRates = false;
+        _isLoadingReading = false;
       });
     }
   }
 
   Future<List<dynamic>?> _fetchSeedlings() async {
     final seedlingProvider = Provider.of<SeedlingProvider>(context, listen: false);
-    // Try provider first (optional optimization, can be removed if always refreshing)
-    // List<dynamic> providerSeedlings = seedlingProvider.seedlings;
-    // if (providerSeedlings.isNotEmpty) {
-    //   return providerSeedlings;
-    // }
-
     try {
-      final response = await SeedlingService.getAllSeedlingsRaw();
+      final response = await SeedlingService.getAllCropBatchesRaw(status: 'seedling'); 
       if (response.isNotEmpty) {
-        // Update the provider
-        seedlingProvider.updateSeedlings(response);
-        return response;
+        // Format today's date for proper comparison
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        
+        // Two-tier sorting: first separate today's items, then sort each group by date
+        final todayItems = <dynamic>[];
+        final futureItems = <dynamic>[];
+        
+        // First pass: separate today's items from future items
+        for (var item in response) {
+          bool isToday = false;
+          DateTime? targetDate;
+          
+          // Check expected transplant date
+          if (item['expectedTransplantDate'] != null) {
+            targetDate = DateTime.tryParse(item['expectedTransplantDate']);
+          } else if (item['calculatedExpectedTransplantDate'] != null) {
+            targetDate = DateTime.tryParse(item['calculatedExpectedTransplantDate']);
+          }
+          
+          if (targetDate != null) {
+            // Compare dates without time component
+            final itemDate = DateTime(targetDate.year, targetDate.month, targetDate.day);
+            isToday = itemDate.isAtSameMomentAs(today);
+            print("Item ${item['batchName']} date: $itemDate, isToday: $isToday");
+          }
+          
+          if (isToday) {
+            todayItems.add(item);
+          } else {
+            futureItems.add(item);
+          }
+        }
+        
+        // Sort each group by date
+        todayItems.sort((a, b) {
+          final dateA = a['expectedTransplantDate'] != null ? 
+              DateTime.tryParse(a['expectedTransplantDate']) : 
+              DateTime.tryParse(a['calculatedExpectedTransplantDate'] ?? '');
+          final dateB = b['expectedTransplantDate'] != null ? 
+              DateTime.tryParse(b['expectedTransplantDate']) : 
+              DateTime.tryParse(b['calculatedExpectedTransplantDate'] ?? '');
+              
+          if (dateA == null && dateB == null) return 0;
+          if (dateA == null) return 1;
+          if (dateB == null) return -1;
+          return dateA.compareTo(dateB);
+        });
+        
+        futureItems.sort((a, b) {
+          final dateA = a['expectedTransplantDate'] != null ? 
+              DateTime.tryParse(a['expectedTransplantDate']) : 
+              DateTime.tryParse(a['calculatedExpectedTransplantDate'] ?? '');
+          final dateB = b['expectedTransplantDate'] != null ? 
+              DateTime.tryParse(b['expectedTransplantDate']) : 
+              DateTime.tryParse(b['calculatedExpectedTransplantDate'] ?? '');
+              
+          if (dateA == null && dateB == null) return 0;
+          if (dateA == null) return 1;
+          if (dateB == null) return -1;
+          return dateA.compareTo(dateB);
+        });
+        
+        // Combine the groups with today's items first
+        final sortedResponse = [...todayItems, ...futureItems];
+        
+        print("SORTED SEEDLINGS (${sortedResponse.length} items):");
+        for (var item in sortedResponse) {
+          final dateStr = item['expectedTransplantDate'] ?? item['calculatedExpectedTransplantDate'] ?? 'no date';
+          final dateObj = DateTime.tryParse(dateStr);
+          final formattedDate = dateObj != null ? "${dateObj.year}-${dateObj.month.toString().padLeft(2, '0')}-${dateObj.day.toString().padLeft(2, '0')}" : dateStr;
+          print("- ${item['batchName']}: $formattedDate");
+        }
+        
+        seedlingProvider.updateCropBatchesList(sortedResponse); 
+        return sortedResponse;
       } else {
-        seedlingProvider.updateSeedlings([]); // Clear provider if response is empty
-        return []; // Return empty list
+        seedlingProvider.updateCropBatchesList([]); 
+        return []; 
       }
     } catch (e) {
-      // print('Error fetching seedlings: $e');
-      seedlingProvider.updateSeedlings([]); // Clear provider on error
-      return null; // Indicate error
+      print("Error fetching seedlings: $e");
+      seedlingProvider.updateCropBatchesList([]); 
+      return null; 
+    }
+  }
+
+  // New method to fetch a summary of transplanted batches
+  Future<List<dynamic>?> _fetchTransplantedBatchesSummary() async {
+    try {
+      final response = await SeedlingService.getAllCropBatchesRaw(status: 'transplanted');
+      
+      // Format today's date for proper comparison
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      
+      // Two-tier sorting: first separate today's items, then sort each group by date
+      final todayItems = <dynamic>[];
+      final futureItems = <dynamic>[];
+      
+      // First pass: separate today's items from future items
+      for (var item in response) {
+        bool isToday = false;
+        DateTime? targetDate;
+        
+        // Check expected harvest date
+        if (item['transplantDetails'] != null && item['transplantDetails']['expectedHarvestDate'] != null) {
+          targetDate = DateTime.tryParse(item['transplantDetails']['expectedHarvestDate']);
+        }
+        
+        if (targetDate != null) {
+          // Compare dates without time component
+          final itemDate = DateTime(targetDate.year, targetDate.month, targetDate.day);
+          isToday = itemDate.isAtSameMomentAs(today);
+          print("Transplant ${item['batchName']} date: $itemDate, isToday: $isToday");
+        }
+        
+        if (isToday) {
+          todayItems.add(item);
+        } else {
+          futureItems.add(item);
+        }
+      }
+      
+      // Sort each group by date
+      todayItems.sort((a, b) {
+        final dateA = a['transplantDetails']?['expectedHarvestDate'] != null ? 
+            DateTime.tryParse(a['transplantDetails']['expectedHarvestDate']) : null;
+        final dateB = b['transplantDetails']?['expectedHarvestDate'] != null ? 
+            DateTime.tryParse(b['transplantDetails']['expectedHarvestDate']) : null;
+            
+        if (dateA == null && dateB == null) return 0;
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+        return dateA.compareTo(dateB);
+      });
+      
+      futureItems.sort((a, b) {
+        final dateA = a['transplantDetails']?['expectedHarvestDate'] != null ? 
+            DateTime.tryParse(a['transplantDetails']['expectedHarvestDate']) : null;
+        final dateB = b['transplantDetails']?['expectedHarvestDate'] != null ? 
+            DateTime.tryParse(b['transplantDetails']['expectedHarvestDate']) : null;
+            
+        if (dateA == null && dateB == null) return 0;
+        if (dateA == null) return 1;
+        if (dateB == null) return -1;
+        return dateA.compareTo(dateB);
+      });
+      
+      // Combine the groups with today's items first
+      final sortedResponse = [...todayItems, ...futureItems];
+      
+      print("SORTED TRANSPLANTS (${sortedResponse.length} items):");
+      for (var item in sortedResponse) {
+        final dateStr = item['transplantDetails']?['expectedHarvestDate'] ?? 'no date';
+        final dateObj = DateTime.tryParse(dateStr);
+        final formattedDate = dateObj != null ? "${dateObj.year}-${dateObj.month.toString().padLeft(2, '0')}-${dateObj.day.toString().padLeft(2, '0')}" : dateStr;
+        print("- ${item['batchName']}: $formattedDate");
+      }
+      
+      return sortedResponse;
+    } catch (e) {
+      print("Error fetching transplanted batches: $e");
+      return null;
     }
   }
 
   Future<void> _fetchTasks() async {
     try {
-      // Assuming TaskProvider has a method like loadTasks
-      // Use listen: false as we are calling it in response to an event, not building UI based on it here
       await Provider.of<TaskProvider>(context, listen: false).loadTasks(context);
     } catch (e) {
-      // print('Error fetching tasks: $e');
-      // Handle task loading error if necessary (e.g., show a message)
     }
+  }
+
+  // New method to fetch all batch data needed for survival analytics
+  Future<List<dynamic>?> _fetchBatchDataForAnalytics() async {
+    // This method will fetch seedling, transplanted, and harvested batches.
+    // For now, it's a placeholder. Implementation will follow.
+    try {
+      final seedlingBatches = await SeedlingService.getAllCropBatchesRaw(status: 'seedling');
+      final transplantedBatches = await SeedlingService.getAllCropBatchesRaw(status: 'transplanted');
+      final harvestedBatches = await SeedlingService.getAllCropBatchesRaw(status: 'harvested');
+      
+      // Combine all batches. We might need to merge them intelligently later
+      // if a single batch moves through statuses but is fetched as separate documents.
+      // Assuming for now `_id` is consistent and we can reconcile.
+      // Or, better, if the backend can provide a comprehensive view for analytics.
+      // For now, just returning a combined list. Need to ensure no duplicates if _id is same.
+      
+      // Simple combination:
+      // List<dynamic> allBatches = [...seedlingBatches, ...transplantedBatches, ...harvestedBatches];
+      
+      // More robust way to combine, assuming `_id` is the unique identifier for a batch across its lifecycle
+      // This is important if a batch appears in multiple lists due to its current status.
+      // However, the current service call fetches based on a *single* status.
+      // So, a batch is either 'seedling', 'transplanted', OR 'harvested' from these calls.
+      // The goal is to get all *distinct* batches and their *full history* if possible,
+      // or at least enough info for the chain calculation.
+      
+      // For survival rate, we need to trace a batch from seedling qty to transplant qty to harvest qty.
+      // The current `getAllCropBatchesRaw` fetches based on *current* status.
+      // This means a harvested batch will have its seedling and transplant info within its document.
+      
+      // So, fetching all 'harvested' batches should give us the most complete data for full-cycle analysis.
+      // Fetching all 'transplanted' batches for seedling->transplant.
+      // Fetching all 'seedling' batches for current seedling counts (less relevant for *historical* survival).
+
+      // Let's fetch ALL batches and the calculation logic will sift through them.
+      // The backend model `cropBatch.js` implies that a single document transitions status
+      // and accumulates details (transplantDetails, harvestDetails).
+      // So, fetching all documents without a status filter, or with multiple statuses, would be ideal
+      // if the service supported it. Since it doesn't, we fetch all and then process.
+      // The most "complete" batches for full lifecycle are those with status 'harvested'.
+      // The ones with 'transplanted' have seedling and transplant info.
+
+      // For now, let's fetch all batches of all three types.
+      // The calculation logic will need to be smart about linking these if they are separate items
+      // or interpreting them if they are single items with full history.
+      // Given `cropBatch.js` structure, a single batch document transitions its status and accumulates data.
+      // So if we fetch status: 'harvested', it should contain previous stage data.
+
+      // Fetching all batches and then filtering/processing:
+      List<dynamic> allBatches = [];
+      allBatches.addAll(await SeedlingService.getAllCropBatchesRaw(status: 'seedling'));
+      allBatches.addAll(await SeedlingService.getAllCropBatchesRaw(status: 'transplanted'));
+      allBatches.addAll(await SeedlingService.getAllCropBatchesRaw(status: 'harvested'));
+      
+      // Remove duplicates by _id, preferring the one with more complete data (e.g. harvested over seedling)
+      final Map<String, dynamic> uniqueBatches = {};
+      for (var batch in allBatches) {
+        final id = batch['_id'] as String;
+        if (!uniqueBatches.containsKey(id) || 
+            _getBatchStagePriority(batch) > _getBatchStagePriority(uniqueBatches[id]!)) {
+          uniqueBatches[id] = batch;
+        }
+      }
+      return uniqueBatches.values.toList();
+
+    } catch (e) {
+      print("Error fetching batch data for analytics: $e");
+      return null;
+    }
+  }
+
+  // Helper to prioritize batches if duplicates are found (e.g., harvested is most complete)
+  int _getBatchStagePriority(Map<String, dynamic> batch) {
+    final status = batch['status'];
+    if (status == 'harvested') return 3;
+    if (status == 'transplanted') return 2;
+    if (status == 'seedling') return 1;
+    return 0;
+  }
+
+  // Placeholder for survival rate calculation logic
+  void _calculateSurvivalRateAnalytics(List<dynamic> allBatches) {
+    if (allBatches.isEmpty) {
+      setState(() {
+        _avgSeedlingToTransplantSurvivalRate = null; // Or some default like 0.0 or 100.0 based on user's "100%" comment
+        _avgTransplantToHarvestSurvivalRate = null;
+        _avgOverallSurvivalRate = null;
+        _seedlingToTransplantSurvivalHistoryData = [];
+        _transplantToHarvestSurvivalHistoryData = [];
+        _overallSurvivalHistoryData = [];
+        _updateSurvivalRateCache(); // Update cache with empty/default values
+      });
+      return;
+    }
+
+    // --- Seedling to Transplant Survival ---
+    List<double> seedlingToTransplantRates = [];
+    List<FlSpot> s2tHistory = [];
+    int s2tBatchCounter = 0;
+
+    // Sort batches by creation date for more meaningful history chart if possible
+    // This assumes 'createdAt' is a reliable ISO string. Add error handling if not.
+    try {
+      allBatches.sort((a, b) {
+        DateTime? dateA = DateTime.tryParse(a['createdAt'] ?? '');
+        DateTime? dateB = DateTime.tryParse(b['createdAt'] ?? '');
+        if (dateA == null && dateB == null) return 0;
+        if (dateA == null) return -1; // Sort nulls first or last as preferred
+        if (dateB == null) return 1;
+        return dateA.compareTo(dateB); // Ascending by creation time
+      });
+    } catch (e) {
+      // Proceed with unsorted if sorting fails
+    }
+    
+
+    for (var batch in allBatches) {
+      final initialQty = batch['quantity'] as num?;
+
+      if (initialQty != null && initialQty > 0) {
+        double currentRate; // Rate for this specific batch for S2T stage
+
+        if (batch['status'] == 'seedling') {
+          // For active seedlings, current survival to transplant is 100%
+          currentRate = 100.0;
+        } else if (batch['status'] == 'transplanted' || batch['status'] == 'harvested') {
+          final transplantedQty = batch['transplantDetails']?['quantityTransplanted'] as num?;
+          if (transplantedQty != null && transplantedQty > 0) {
+            currentRate = (transplantedQty / initialQty) * 100.0;
+          } else {
+            // If transplanted/harvested but no valid transplant qty, treat as 0% for this stage (or skip?)
+            // For now, let's treat as 0% for this batch at this stage if data is missing post-seedling stage.
+            currentRate = 0.0; 
+          }
+        } else {
+          // Other statuses (e.g., disposed) - skip for S2T calculation or assign specific rate?
+          continue; // Skip this batch for S2T average
+        }
+        
+        seedlingToTransplantRates.add(currentRate);
+        s2tHistory.add(FlSpot(s2tBatchCounter.toDouble(), currentRate));
+        s2tBatchCounter++;
+
+      } else {
+        // Skip this batch for S2T average
+      }
+    }
+
+    if (seedlingToTransplantRates.isNotEmpty) {
+      _avgSeedlingToTransplantSurvivalRate = seedlingToTransplantRates.reduce((a, b) => a + b) / seedlingToTransplantRates.length;
+    } else {
+      _avgSeedlingToTransplantSurvivalRate = null; // Will display 100% as per requirement
+    }
+    // Take last 7 for chart, or fewer if less data. History is already chronologically sorted.
+    _seedlingToTransplantSurvivalHistoryData = s2tHistory.length > 7 ? s2tHistory.sublist(s2tHistory.length - 7) : s2tHistory;
+
+
+    // --- Transplant to Harvest Survival ---
+    List<double> transplantToHarvestRates = [];
+    List<FlSpot> t2hHistory = [];
+    int t2hBatchCounter = 0;
+
+    // Filter for harvested batches and sort by harvestDate for history chart
+    List<dynamic> harvestedBatchesForT2H = allBatches.where((b) => b['status'] == 'harvested').toList();
+    try {
+       harvestedBatchesForT2H.sort((a, b) {
+        DateTime? dateA = DateTime.tryParse(a['harvestDetails']?['harvestDate'] ?? '');
+        DateTime? dateB = DateTime.tryParse(b['harvestDetails']?['harvestDate'] ?? '');
+        if (dateA == null && dateB == null) return 0;
+        if (dateA == null) return -1;
+        if (dateB == null) return 1;
+        return dateA.compareTo(dateB); // Ascending by harvest time
+      });
+    } catch (e) {
+      // Proceed with unsorted if sorting fails
+    }
+
+    for (var batch in harvestedBatchesForT2H) {
+      final transplantedQty = batch['transplantDetails']?['quantityTransplanted'] as num?;
+      final harvestedQty = batch['harvestDetails']?['quantityHarvested'] as num?;
+
+      if (transplantedQty != null && transplantedQty > 0 && harvestedQty != null && harvestedQty > 0) {
+        double rate = (harvestedQty / transplantedQty) * 100.0;
+        transplantToHarvestRates.add(rate);
+        t2hHistory.add(FlSpot(t2hBatchCounter.toDouble(), rate));
+        t2hBatchCounter++;
+      } else {
+        // Skip this batch for T2H average
+      }
+    }
+
+    if (transplantToHarvestRates.isNotEmpty) {
+      _avgTransplantToHarvestSurvivalRate = transplantToHarvestRates.reduce((a, b) => a + b) / transplantToHarvestRates.length;
+    } else {
+      _avgTransplantToHarvestSurvivalRate = null;
+    }
+    _transplantToHarvestSurvivalHistoryData = t2hHistory.length > 7 ? t2hHistory.sublist(t2hHistory.length - 7) : t2hHistory;
+
+
+    // --- Overall Survival (Seedling to Harvest) ---
+    List<double> overallRates = [];
+    List<FlSpot> overallHistory = [];
+    int overallBatchCounter = 0;
+
+    // Using the same sorted harvestedBatchesForT2H as it's relevant here too
+    for (var batch in harvestedBatchesForT2H) {
+      final initialQty = batch['quantity'] as num?;
+      final harvestedQty = batch['harvestDetails']?['quantityHarvested'] as num?;
+
+      if (initialQty != null && initialQty > 0 && harvestedQty != null && harvestedQty > 0) {
+        double rate = (harvestedQty / initialQty) * 100.0;
+        overallRates.add(rate);
+        overallHistory.add(FlSpot(overallBatchCounter.toDouble(), rate));
+        overallBatchCounter++;
+      } else {
+        // Skip this batch for overall average
+      }
+    }
+
+    if (overallRates.isNotEmpty) {
+      _avgOverallSurvivalRate = overallRates.reduce((a, b) => a + b) / overallRates.length;
+    } else {
+      _avgOverallSurvivalRate = null;
+    }
+    _overallSurvivalHistoryData = overallHistory.length > 7 ? overallHistory.sublist(overallHistory.length - 7) : overallHistory;
+    
+    _updateSurvivalRateCache();
+  }
+
+  // New method to update survival rate cache
+  void _updateSurvivalRateCache() {
+    _cachedAvgSeedlingToTransplantSurvivalRate = _avgSeedlingToTransplantSurvivalRate;
+    _cachedSeedlingToTransplantSurvivalStatus = _avgSeedlingToTransplantSurvivalRate != null ? "Avg. Rate" : "N/A";
+    _cachedAvgTransplantToHarvestSurvivalRate = _avgTransplantToHarvestSurvivalRate;
+    _cachedTransplantToHarvestSurvivalStatus = _avgTransplantToHarvestSurvivalRate != null ? "Avg. Rate" : "N/A";
+    _cachedAvgOverallSurvivalRate = _avgOverallSurvivalRate;
+    _cachedOverallSurvivalStatus = _avgOverallSurvivalRate != null ? "Avg. Rate" : "N/A";
+    
+    _cachedSeedlingToTransplantSurvivalHistoryData = List.from(_seedlingToTransplantSurvivalHistoryData);
+    _cachedTransplantToHarvestSurvivalHistoryData = List.from(_transplantToHarvestSurvivalHistoryData);
+    _cachedOverallSurvivalHistoryData = List.from(_overallSurvivalHistoryData);
   }
 
   // Update all cached calculations at once
   void _updateCalculationCache() {
     if (_seedlings.isEmpty) return;
 
-    _cachedTemperature = _calculateAverageTemperature(_seedlings);
-    _cachedTemperatureStatus = _getTemperatureStatus(_seedlings);
-    _cachedPHLevel = _calculateAveragePHLevel(_seedlings).toString();
-    _cachedPHLevelStatus = _getPHLevelStatus(_seedlings);
     _cachedSeedlingAge = '${_getLatestSeedlingAge(_seedlings)}'; // Just days number
     _cachedSeedlingAgeStatus = _getLatestSeedlingAgeStatus(_seedlings);
-    _cachedGermination = '${_calculateAverageGermination(_seedlings)}'; // Just number
-    _cachedGerminationStatus = _getGerminationStatus(_seedlings);
   }
 
   @override
@@ -193,22 +660,39 @@ class _HomeScreenState extends State<HomeScreen> {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final user = Provider.of<AuthProvider>(context).user;
 
-    // Define colors for closer match to screenshot
-    const reminderCardColor = Color(0xFFFFA726); // Keep custom Reminder color for now
-    const statusNormalColor = Colors.green;
+    // Consume notification providers
+    final dueItemsProvider = Provider.of<DueItemsNotificationProvider>(context);
+    final generalNotificationProvider = Provider.of<GeneralNotificationProvider>(context);
+
+    final bool hasUnreadDueItems = dueItemsProvider.dueCropNotifications.any((n) => !dueItemsProvider.isCropNotificationRead(n['_id'])) ||
+                                 dueItemsProvider.dueTaskNotifications.any((n) => !dueItemsProvider.isTaskNotificationRead(n['_id']));
+    final bool hasUnreadSystemMessages = generalNotificationProvider.unreadCount > 0;
+    final bool showNotificationBadge = hasUnreadDueItems || hasUnreadSystemMessages;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor, // Use theme background
       appBar: AppBar(
-        backgroundColor: colorScheme.primary, // Use theme primary color
         elevation: 0,
         toolbarHeight: 80, // Increased height for content
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment.topLeft,
+              radius: 2.0,
+              colors: [
+                Colors.blue.shade400, // Lighter blue at center
+                Theme.of(context).primaryColor,
+              ],
+              stops: [0.0, 1.0],
+            ),
+          ),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'Good Morning',
+              'Good Morning', // This was static, can be dynamic if needed
               style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onPrimary),
             ),
             Text(
@@ -223,17 +707,42 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
-          _buildAppBarAction(Icons.refresh, () {
-            _refreshHomeScreenData(); // Call the combined refresh method
-          }),
-          _buildAppBarAction(Icons.notifications_outlined, () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const NotificationScreen(),
-              ),
-            );
-          }),
+          _buildAppBarAction(
+            Icons.notifications_outlined,
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotificationScreen(),
+                ),
+              );
+            },
+            badge: showNotificationBadge
+                ? Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 12,
+                        minHeight: 12,
+                      ),
+                      child: const Text( // Optional: show count
+                        '', // Empty string for just a dot, or use generalNotificationProvider.unreadCount.toString()
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                : null,
+          ),
           _buildAppBarAction(Icons.settings_outlined, () {
             Navigator.push(
               context,
@@ -242,14 +751,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             );
           }),
-          // Temporary Theme Switcher Button (Optional: Keep or remove)
-          IconButton(
-            tooltip: "Cycle Theme: ${themeProvider.currentPaletteName}",
-            icon: Icon(Icons.palette_outlined, color: colorScheme.onPrimary), // Use theme color
-            onPressed: () {
-              themeProvider.cyclePalette();
-            },
-          ),
           const SizedBox(width: 8), // Spacing at the end
         ],
       ),
@@ -260,74 +761,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView(
             children: [
               const SizedBox(height: 16), // Space below AppBar
-              // --- Attendance Reminder Card ---
-              // Card(
-              //   color: reminderCardColor, // Custom orange
-              //   shape: RoundedRectangleBorder(
-              //       borderRadius: BorderRadius.circular(12)),
-              //   elevation: 2,
-              //   child: Padding(
-              //     padding: const EdgeInsets.all(16.0),
-              //     child: Row(
-              //       children: [
-              //         const CircleAvatar(
-              //           backgroundColor: Colors.white54,
-              //           radius: 18,
-              //           child: Icon(Icons.timer_outlined,
-              //               color: reminderCardColor, size: 20),
-              //         ),
-              //         const SizedBox(width: 12),
-              //         Expanded(
-              //           child: Column(
-              //             crossAxisAlignment: CrossAxisAlignment.start,
-              //             children: [
-              //               Text(
-              //                 'Attendance Reminder',
-              //                 style: theme.textTheme.titleMedium?.copyWith(
-              //                     color: Colors.white,
-              //                     fontWeight: FontWeight.bold),
-              //               ),
-              //               const SizedBox(height: 4),
-              //               Text(
-              //                 'Please make sure you clock in to record your attendance for today.',
-              //                 style: theme.textTheme.bodySmall
-              //                     ?.copyWith(color: Colors.white70),
-              //               ),
-              //             ],
-              //           ),
-              //         ),
-              //       ],
-              //     ),
-              //   ),
-              // ),
-              // Padding(
-              //   padding: const EdgeInsets.symmetric(vertical: 12.0),
-              //   child: GestureDetector(
-              //     onTap: () {
-              //       Navigator.push(
-              //         context,
-              //         MaterialPageRoute(
-              //           builder: (context) => const AttendanceLogScreen(),
-              //         ),
-              //       );
-              //     },
-              //     child: Row(
-              //       mainAxisAlignment: MainAxisAlignment.center,
-              //       children: [
-              //         Icon(Icons.touch_app_outlined,
-              //             color: colorScheme.primary, size: 18),
-              //         const SizedBox(width: 8),
-              //         Text(
-              //           'Clock In Now',
-              //           style: theme.textTheme.bodyMedium?.copyWith(
-              //             fontWeight: FontWeight.bold,
-              //             color: colorScheme.primary,
-              //           ),
-              //         ),
-              //       ],
-              //     ),
-              //   ),
-              // ),
               // --- Farm Status Section Header ---
               _buildSectionHeader('Farm Status', Icons.water_drop_outlined,
                   colorScheme.primary),
@@ -345,60 +778,105 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildInfoCard(
                     context,
                     'Water Temperature',
-                    _isLoadingSeedlings || _seedlings.isEmpty
-                        ? '25°C'
-                        : _cachedTemperature ??
-                            _calculateAverageTemperature(_seedlings),
-                    _isLoadingSeedlings || _seedlings.isEmpty
-                        ? 'Normal'
-                        : _cachedTemperatureStatus ??
-                            _getTemperatureStatus(_seedlings),
+                    _isLoadingReading
+                        ? 'Loading...'
+                        : _latestTemperature != null
+                            ? '${_latestTemperature!.toStringAsFixed(2)}°C'
+                            : 'N/A',
+                    _isLoadingReading
+                        ? 'Loading...'
+                        : _latestTemperature != null
+                            ? (_latestTemperature! < 18 ? 'Low' : _latestTemperature! > 30 ? 'High' : 'Normal')
+                            : 'Unknown',
                     Icons.thermostat,
-                    _tempChartData, // Pass chart data
-                    Colors.blue, // Chart line color
+                    _tempChartData,
+                   Colors.blue,
                   ),
                   _buildInfoCard(
                     context,
                     'PH Level',
-                    _isLoadingSeedlings || _seedlings.isEmpty
-                        ? '6.0'
-                        : _cachedPHLevel ??
-                            _calculateAveragePHLevel(_seedlings).toString(),
-                    _isLoadingSeedlings || _seedlings.isEmpty
-                        ? 'Normal'
-                        : _cachedPHLevelStatus ?? _getPHLevelStatus(_seedlings),
+                    _isLoadingReading
+                        ? 'Loading...'
+                        : _latestPh != null
+                            ? _latestPh!.toStringAsFixed(2)
+                            : 'N/A',
+                    _isLoadingReading
+                        ? 'Loading...'
+                        : _latestPh != null
+                            ? (_latestPh! < 5.5 ? 'Low' : _latestPh! > 7.0 ? 'High' : 'Normal')
+                            : 'Unknown',
                     Icons.science_outlined,
-                    _phChartData, // Pass chart data
-                    Colors.orange, // Chart line color
+                    _phChartData,
+                    Colors.orange,
                   ),
                   _buildInfoCard(
                     context,
                     'Nutrient Control',
-                    _isLoadingSeedlings || _seedlings.isEmpty
-                        ? '5 days ago' // Example value
-                        : '${_cachedSeedlingAge ?? '0'} days ago',
-                    _isLoadingSeedlings || _seedlings.isEmpty
-                        ? 'Normal'
-                        : _cachedSeedlingAgeStatus ??
-                            _getLatestSeedlingAgeStatus(_seedlings),
+                    _minutesAgo ?? 'Never', // Display the last pump message
+                    _lastPumpMessage ?? 'Never', // Status can be adjusted as needed
                     Icons.spa_outlined,
-                    _nutrientChartData, // Pass chart data
-                    Colors.green, // Chart line color
+                    _nutrientChartData,
+                    Colors.green,
                   ),
                   _buildInfoCard(
                     context,
                     'Crop Insights',
-                    _isLoadingSeedlings || _seedlings.isEmpty
-                        ? '83%' // Example value
-                        : '${_cachedGermination ?? '0'}%',
-                    _isLoadingSeedlings || _seedlings.isEmpty
-                        ? 'Normal'
-                        : _cachedGerminationStatus ??
-                            _getGerminationStatus(_seedlings),
-                    Icons.bar_chart,
-                    _germinationChartData, // Pass chart data
-                    Colors.purple, // Chart line color
+                    _isLoadingSurvivalRates || _cachedAvgSeedlingToTransplantSurvivalRate == null
+                        ? '100%' // Display 100% if loading or no data
+                        : '${_cachedAvgSeedlingToTransplantSurvivalRate!.toStringAsFixed(1)}%',
+                    _isLoadingSurvivalRates
+                        ? 'Loading...'
+                        : (_cachedAvgSeedlingToTransplantSurvivalRate == null
+                            ? 'Initial Stage' // Status when 100% is shown due to no data
+                            : _cachedSeedlingToTransplantSurvivalStatus ?? 'Avg. Survival'),
+                    Icons.trending_up, // New Icon
+                    _isLoadingSurvivalRates || _cachedAvgSeedlingToTransplantSurvivalRate == null
+                        ? [] // Pass empty list for chart if 100% is shown or loading
+                        : _cachedSeedlingToTransplantSurvivalHistoryData,
+                    Colors.blue, // New Color
+                    minYChartValue: 0, // Y-axis for percentage
+                    maxYChartValue: 105, // Y-axis for percentage ( slightly > 100 for padding)
                   ),
+                  // --- New Survival Rate Info Cards ---
+                  // _buildInfoCard(
+                  //   context,
+                  //   'Seedling Survival',
+                  //   _isLoadingSurvivalRates 
+                  //       ? 'Loading...' 
+                  //       : _cachedAvgSeedlingToTransplantSurvivalRate != null 
+                  //           ? '${_cachedAvgSeedlingToTransplantSurvivalRate!.toStringAsFixed(1)}%' 
+                  //           : 'N/A',
+                  //   _isLoadingSurvivalRates ? '' : (_cachedSeedlingToTransplantSurvivalStatus ?? 'N/A'),
+                  //   Icons.trending_up, // Example icon
+                  //   _isLoadingSurvivalRates ? [] : _cachedSeedlingToTransplantSurvivalHistoryData,
+                  //   Colors.cyan, // Example color
+                  // ),
+                  // _buildInfoCard(
+                  //   context,
+                  //   'Transplant Yield',
+                  //    _isLoadingSurvivalRates 
+                  //       ? 'Loading...' 
+                  //       : _cachedAvgTransplantToHarvestSurvivalRate != null 
+                  //           ? '${_cachedAvgTransplantToHarvestSurvivalRate!.toStringAsFixed(1)}%' 
+                  //           : 'N/A',
+                  //   _isLoadingSurvivalRates ? '' : (_cachedTransplantToHarvestSurvivalStatus ?? 'N/A'),
+                  //   Icons.shield_outlined, // Example icon
+                  //   _isLoadingSurvivalRates ? [] : _cachedTransplantToHarvestSurvivalHistoryData,
+                  //   Colors.teal, // Example color
+                  // ),
+                  // _buildInfoCard(
+                  //   context,
+                  //   'Overall Yield',
+                  //   _isLoadingSurvivalRates 
+                  //       ? 'Loading...' 
+                  //       : _cachedAvgOverallSurvivalRate != null 
+                  //           ? '${_cachedAvgOverallSurvivalRate!.toStringAsFixed(1)}%' 
+                  //           : 'N/A',
+                  //   _isLoadingSurvivalRates ? '' : (_cachedOverallSurvivalStatus ?? 'N/A'),
+                  //   Icons.pie_chart_outline, // Example icon
+                  //   _isLoadingSurvivalRates ? [] : _cachedOverallSurvivalHistoryData,
+                  //   Colors.pink, // Example color
+                  // ),
                 ],
               ),
               const SizedBox(height: 20),
@@ -425,14 +903,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             MaterialPageRoute(
                               builder: (context) => SeedlingsInsightsScreen(),
                             ),
-                          ).then((_) => _refreshHomeScreenData());
+                          );
                         },
                         child: Text(
                           'Seedlings Insight', // Title inside card now
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: colorScheme.primary,
-                            decoration: TextDecoration.underline,
                           ),
                         ),
                       ),
@@ -473,42 +950,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 12), // Add spacing between cards
 
               // --- Add Transplant Insight Card --- 
-              Card(
-                elevation: 1,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Transplant Insight', // Title
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      // Placeholder content - Replace with real data/widgets
-                      Row(
-                        children: [
-                          Icon(Icons.transfer_within_a_station_outlined, color: theme.hintColor, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Some batches might be ready for transplanting soon. Check details.',
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Add more details or actions here if needed
-                    ],
-                  ),
-                ),
-              ),
+              _buildTransplantInsightCard(),
               // --- End Transplant Insight Card --- 
 
               const SizedBox(height: 24),
@@ -586,21 +1028,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Helper for AppBar actions
-  Widget _buildAppBarAction(IconData icon, VoidCallback onPressed) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: CircleAvatar(
-        radius: 18,
-        backgroundColor: colorScheme.onPrimary.withOpacity(0.2),
-        child: IconButton(
-          icon: Icon(icon, size: 20, color: colorScheme.onPrimary),
+  Widget _buildAppBarAction(IconData icon, VoidCallback onPressed, {Widget? badge}) {
+    return Stack(
+      children: <Widget>[
+        IconButton(
+          icon: Icon(icon, size: 28), // Increased size slightly
           onPressed: onPressed,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
+          color: Theme.of(context).colorScheme.onPrimary, // Ensure icon color matches
+          tooltip: icon == Icons.notifications_outlined ? 'Notifications' : (icon == Icons.settings_outlined ? 'Settings' : null),
         ),
-      ),
+        if (badge != null) badge, // Display badge if provided
+      ],
     );
   }
 
@@ -624,26 +1062,53 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSeedlingItemFromData(dynamic seedling) {
     final theme = Theme.of(context);
+    
+    // Get expected transplant date
+    DateTime? expectedTransplantDate;
+    if (seedling['expectedTransplantDate'] != null) {
+      expectedTransplantDate = DateTime.tryParse(seedling['expectedTransplantDate']);
+    } else if (seedling['calculatedExpectedTransplantDate'] != null) {
+      expectedTransplantDate = DateTime.tryParse(seedling['calculatedExpectedTransplantDate']);
+    }
+    
+    String formattedDate = expectedTransplantDate != null 
+        ? DateFormat('MMM. d, yyyy').format(expectedTransplantDate)
+        : 'Not scheduled';
+        
+    // Check if expected date is today
+    bool isToday = false;
+    if (expectedTransplantDate != null) {
+      final now = DateTime.now();
+      isToday = expectedTransplantDate.year == now.year && 
+                expectedTransplantDate.month == now.month && 
+                expectedTransplantDate.day == now.day;
+    }
+        
     return ListTile(
       dense: true, // Make list items less tall
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-      leading:
-          Icon(Icons.eco_outlined, color: theme.colorScheme.primary, size: 20),
+      leading: Icon(Icons.eco, color: theme.colorScheme.primary, size: 20),
       title: Text(
         seedling['batchName'] ?? 'Unknown Batch',
         style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
       ),
       subtitle: Text(
-        'Planted date: ${DateFormat('MMM. d, yyyy').format(DateTime.parse(seedling['plantedDate']))}',
+        'Expected transplant: $formattedDate',
         style: theme.textTheme.bodySmall,
       ),
       onTap: () {
-        Navigator.pushNamed(
+        Navigator.push(
           context,
-          '/batchDetails', 
-          arguments: {'seedlingId': seedling['_id']}, // Pass seedlingId as argument
-        ).then((_) => _refreshHomeScreenData()); // Keep refresh logic
+          MaterialPageRoute(
+            builder: (context) => const SeedlingsInsightsScreen(),
+          ),
+        ).then((_) => _refreshHomeScreenData());
       },
+      tileColor: isToday ? Colors.green.shade50 : null,
+      shape: isToday ? RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.green.shade300, width: 1),
+      ) : null,
     );
   }
 
@@ -655,6 +1120,7 @@ class _HomeScreenState extends State<HomeScreen> {
     IconData iconData,
     List<FlSpot> chartData,
     Color chartLineColor,
+    {double? minYChartValue, double? maxYChartValue}
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -703,7 +1169,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Spacer(), // Push chart to bottom
             SizedBox(
               height: 40, // Height for the chart
-              child: _buildMiniLineChart(chartData, chartLineColor),
+              child: _buildMiniLineChart(chartData, chartLineColor, minYValue: minYChartValue, maxYValue: maxYChartValue),
             ),
           ],
         ),
@@ -712,7 +1178,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // --- Mini Line Chart Widget ---
-  Widget _buildMiniLineChart(List<FlSpot> spots, Color lineColor) {
+  Widget _buildMiniLineChart(List<FlSpot> spots, Color lineColor, {double? minYValue, double? maxYValue}) {
+    if (spots.isEmpty) {
+      return const SizedBox.shrink(); // Return an empty widget if there are no spots
+    }
     return LineChart(
       LineChartData(
         gridData: const FlGridData(show: false),
@@ -742,8 +1211,8 @@ class _HomeScreenState extends State<HomeScreen> {
         minX: spots.first.x,
         maxX: spots.last.x,
         // Adjust Y range slightly for padding, or dynamically based on data
-        minY: spots.map((spot) => spot.y).reduce((a, b) => a < b ? a : b) - 1,
-        maxY: spots.map((spot) => spot.y).reduce((a, b) => a > b ? a : b) + 1,
+        minY: minYValue ?? spots.map((spot) => spot.y).reduce((a, b) => a < b ? a : b) - 1,
+        maxY: maxYValue ?? spots.map((spot) => spot.y).reduce((a, b) => a > b ? a : b) + 1,
         baselineY: 0,
       ),
       duration: const Duration(milliseconds: 150), // Optional animation
@@ -1066,24 +1535,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Normal';
   }
 
-  String _calculateAverageGermination(List<dynamic> seedlings) {
-    if (seedlings.isEmpty) return '0';
-    double sum = 0;
-    for (var seedling in seedlings) {
-      sum += seedling['germination'] ?? 0.0;
-    }
-    return (sum / seedlings.length).toStringAsFixed(0);
-  }
-
-  String _getGerminationStatus(List<dynamic> seedlings) {
-    if (seedlings.isEmpty) return 'N/A';
-    double avgGermination =
-        double.tryParse(_calculateAverageGermination(seedlings)) ?? 0;
-    if (avgGermination < 50) return 'Low';
-    if (avgGermination > 85) return 'Excellent';
-    return 'Normal';
-  }
-
   String _formatDate(DateTime date) {
     final months = [
       'January', 'February', 'March', 'April', 'May', 'June', 'July',
@@ -1091,4 +1542,125 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
+
+  // --- Updated Widget for Transplant Insight Card (showing transplanted batches) ---
+  Widget _buildTransplantInsightCard() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      elevation: 1,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding:
+                const EdgeInsets.only(left: 16.0, top: 16, right: 16),
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TransplantCropInsightScreen(),
+                  ),
+                ).then((_) => _refreshHomeScreenData());
+              },
+              child: Text(
+                'Transplant Insight',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+          _isLoadingTransplantInsights
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              : _transplantedBatchesSummary.isEmpty
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 16.0, vertical: 30.0),
+                        child: Text(
+                          'No transplanted batches available',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    )
+                  : Column(
+                      children: _transplantedBatchesSummary
+                          .take(4) // Show only first 4 transplanted batches
+                          .map(
+                            (batch) => _buildTransplantItemFromData(batch),
+                          )
+                          .toList(),
+                    ),
+        ],
+      ),
+    );
+  }
+
+  // New helper method to build transplant list items, similar to seedling items
+  Widget _buildTransplantItemFromData(dynamic transplantBatch) {
+    final theme = Theme.of(context);
+    
+    // Get expected harvest date
+    DateTime? expectedHarvestDate;
+    if (transplantBatch['transplantDetails'] != null && 
+        transplantBatch['transplantDetails']['expectedHarvestDate'] != null) {
+      expectedHarvestDate = DateTime.tryParse(transplantBatch['transplantDetails']['expectedHarvestDate']);
+    }
+    
+    String formattedDate = expectedHarvestDate != null 
+        ? DateFormat('MMM. d, yyyy').format(expectedHarvestDate)
+        : 'Not scheduled';
+    
+    // Check if expected date is today
+    bool isToday = false;
+    if (expectedHarvestDate != null) {
+      final now = DateTime.now();
+      isToday = expectedHarvestDate.year == now.year && 
+                expectedHarvestDate.month == now.month && 
+                expectedHarvestDate.day == now.day;
+    }
+    
+    return ListTile(
+      dense: true, // Make list items less tall
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+      leading: Icon(Icons.eco, color: theme.colorScheme.primary, size: 20),
+      title: Text(
+        transplantBatch['batchName'] ?? 'Unknown Batch',
+        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+      ),
+      subtitle: Text(
+        'Expected harvest: $formattedDate',
+        style: theme.textTheme.bodySmall,
+      ),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const TransplantCropInsightScreen(),
+          ),
+        ).then((_) => _refreshHomeScreenData());
+      },
+      tileColor: isToday ? Colors.green.shade50 : null,
+      shape: isToday ? RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.green.shade300, width: 1),
+      ) : null,
+    );
+  }
+  // --- End Transplant Insight Card Widget ---
 }

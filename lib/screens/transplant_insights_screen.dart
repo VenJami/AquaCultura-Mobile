@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/transplant_provider.dart';
 import 'transplant_details_screen.dart';
+import 'package:intl/intl.dart'; // For date formatting
 
 class TransplantInsightsScreen extends StatefulWidget {
   const TransplantInsightsScreen({super.key});
@@ -16,8 +17,9 @@ class _TransplantInsightsScreenState extends State<TransplantInsightsScreen> {
   void initState() {
     super.initState();
     Future.microtask(() {
+      // Use the updated method from TransplantProvider
       Provider.of<TransplantProvider>(context, listen: false)
-          .loadTransplants(context);
+          .loadTransplantedCropBatches(context);
     });
   }
 
@@ -29,62 +31,65 @@ class _TransplantInsightsScreenState extends State<TransplantInsightsScreen> {
       ),
       body: Consumer<TransplantProvider>(
         builder: (context, provider, child) {
-          if (provider.isLoading) {
+          if (provider.isLoading && provider.transplantedCropBatches.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (provider.transplants.isEmpty) {
-            return const Center(child: Text('No transplants found'));
+          if (provider.transplantedCropBatches.isEmpty) {
+            return const Center(child: Text('No transplanted batches found to show insights.'));
           }
 
-          final successfulTransplants = provider.transplants
-              .where((transplant) => transplant['status'] == 'Success')
-              .toList();
+          // Current CropBatch model doesn't have a success/fail status for the transplant action itself.
+          // So, success/failed counts will be 0 for now.
+          final successfulTransplantsCount = 0; 
+          final failedTransplantsCount = 0;
 
-          final failedTransplants = provider.transplants
-              .where((transplant) => transplant['status'] == 'Failed')
-              .toList();
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSummaryCard(
-                  title: 'Transplant Summary',
-                  totalCount: provider.transplants.length,
-                  successCount: successfulTransplants.length,
-                  failedCount: failedTransplants.length,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Recent Transplants',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+          return RefreshIndicator(
+            onRefresh: () => Provider.of<TransplantProvider>(context, listen: false)
+                .loadTransplantedCropBatches(context),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSummaryCard(
+                    title: 'Transplanted Batches Summary',
+                    totalCount: provider.transplantedCropBatches.length,
+                    // These will be 0 until model supports success/failure of transplant event
+                    successCount: successfulTransplantsCount, 
+                    failedCount: failedTransplantsCount,
                   ),
-                ),
-                const SizedBox(height: 8),
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: provider.transplants.length,
-                  itemBuilder: (context, index) {
-                    final transplant = provider.transplants[index];
-                    return _buildTransplantCard(transplant);
-                  },
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  const Text(
+                    'All Transplanted Batches', // Changed title
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: provider.transplantedCropBatches.length,
+                    itemBuilder: (context, index) {
+                      final cropBatch = provider.transplantedCropBatches[index];
+                      return _buildTransplantCard(cropBatch);
+                    },
+                  ),
+                ],
+              ),
             ),
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Navigate to create transplant screen
-        },
-        child: const Icon(Icons.add),
-      ),
+      // FAB removed as direct creation of 'transplant' records is not the flow anymore
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: () {
+      //     // Navigate to create transplant screen
+      //   },
+      //   child: const Icon(Icons.add),
+      // ),
     );
   }
 
@@ -118,12 +123,12 @@ class _TransplantInsightsScreenState extends State<TransplantInsightsScreen> {
                   color: Colors.blue,
                 ),
                 _buildStatItem(
-                  label: 'Success',
+                  label: 'Success', // Placeholder
                   count: successCount,
                   color: Colors.green,
                 ),
                 _buildStatItem(
-                  label: 'Failed',
+                  label: 'Failed', // Placeholder
                   count: failedCount,
                   color: Colors.red,
                 ),
@@ -155,27 +160,36 @@ class _TransplantInsightsScreenState extends State<TransplantInsightsScreen> {
     );
   }
 
-  Widget _buildTransplantCard(Map<String, dynamic> transplant) {
-    final statusColor = transplant['status'] == 'Success'
-        ? Colors.green
-        : transplant['status'] == 'Failed'
-            ? Colors.red
-            : Colors.orange;
+  Widget _buildTransplantCard(Map<String, dynamic> cropBatch) { // Parameter changed
+    // Adapt to CropBatch structure
+    final String batchName = cropBatch['batchName'] ?? 'Batch N/A';
+    final String plantType = cropBatch['plantType'] ?? 'Plant N/A';
+    final Map<String, dynamic>? details = cropBatch['transplantDetails'] as Map<String, dynamic>?;
+    final String location = details?['targetLocation'] ?? 'Location N/A';
+    final String transplantDateStr = details?['transplantDate'] ?? '';
+    
+    // For status, it will always be 'transplanted' if it's from TransplantProvider
+    // If you want to show a sub-status of the transplant action (e.g. health after transplant), model needs change.
+    // For now, we don't have a specific success/failure status for the transplant event itself.
+    const statusColor = Colors.orange; // Default for 'transplanted' general status
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: ListTile(
-        title: Text(transplant['location'] ?? 'No location'),
+        title: Text('$batchName ($plantType)'), // Combined for clarity
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Date: ${_formatDate(transplant['date'])}',
+              'Location: $location',
             ),
             Text(
-              'Status: ${transplant['status']}',
-              style: TextStyle(color: statusColor),
+              'Transplanted: ${_formatDate(transplantDateStr)}',
             ),
+            // Text(
+            //   'Status: Transplanted', // Example, replace with actual status if available
+            //   style: TextStyle(color: statusColor),
+            // ),
           ],
         ),
         trailing: const Icon(Icons.chevron_right),
@@ -184,7 +198,7 @@ class _TransplantInsightsScreenState extends State<TransplantInsightsScreen> {
             context,
             MaterialPageRoute(
               builder: (context) => TransplantDetailsScreen(
-                transplantId: transplant['_id'],
+                transplantId: cropBatch['_id'], // Pass the CropBatch ID
               ),
             ),
           );
@@ -194,11 +208,10 @@ class _TransplantInsightsScreenState extends State<TransplantInsightsScreen> {
   }
 
   String _formatDate(String? dateString) {
-    if (dateString == null) return 'N/A';
-
+    if (dateString == null || dateString.isEmpty) return 'N/A';
     try {
       final date = DateTime.parse(dateString);
-      return '${date.month}/${date.day}/${date.year}';
+      return DateFormat('MMM dd, yyyy').format(date);
     } catch (e) {
       return 'Invalid date';
     }

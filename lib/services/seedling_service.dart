@@ -4,20 +4,23 @@ import '../config/api.dart';
 import '../utils/secure_storage.dart';
 
 class SeedlingService {
-  static const String _seedlingsEndpoint = '/seedlings';
+  static const String _cropBatchesEndpoint = '/cropbatches';
 
-  /// Get all seedlings from the server
-  static Future<List<dynamic>> getAllSeedlingsRaw() async {
+  /// Get all crop batches from the server, optionally filtered by status
+  static Future<List<dynamic>> getAllCropBatchesRaw({String? status}) async {
     try {
-      print('getAllSeedlingsRaw - Starting API call');
+      print('getAllCropBatchesRaw - Starting API call (status: $status)');
       final token = await SecureStorage.getToken();
       if (token == null) {
-        print('getAllSeedlingsRaw - No auth token found');
+        print('getAllCropBatchesRaw - No auth token found');
         throw Exception('Authentication token not found');
       }
 
-      final url = '${ApiConfig.baseUrl}$_seedlingsEndpoint';
-      print('getAllSeedlingsRaw - Making API request to $url');
+      String url = '${ApiConfig.baseUrl}$_cropBatchesEndpoint';
+      if (status != null && status.isNotEmpty) {
+        url += '?status=$status';
+      }
+      print('getAllCropBatchesRaw - Making API request to $url');
 
       final response = await http.get(
         Uri.parse(url),
@@ -29,30 +32,30 @@ class SeedlingService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body) as List<dynamic>;
-        print('getAllSeedlingsRaw - Response data length: ${data.length}');
+        print('getAllCropBatchesRaw - Response data length: ${data.length}');
         return data;
       } else {
-        print('getAllSeedlingsRaw - Error response: ${response.body}');
-        throw Exception('Failed to load seedlings: ${response.body}');
+        print('getAllCropBatchesRaw - Error response: ${response.body}');
+        throw Exception('Failed to load crop batches: ${response.body}');
       }
     } catch (e) {
-      print('getAllSeedlingsRaw - Exception: $e');
-      throw e;
+      print('getAllCropBatchesRaw - Exception: $e');
+      rethrow;
     }
   }
 
-  /// Get sample seedlings from the server
-  static Future<List<dynamic>> getSampleSeedlingsRaw() async {
+  /// Get sample crop batches from the server
+  static Future<List<dynamic>> getSampleCropBatchesRaw() async {
     try {
-      print('getSampleSeedlingsRaw - Starting API call');
+      print('getSampleCropBatchesRaw - Starting API call');
       final token = await SecureStorage.getToken();
       if (token == null) {
-        print('getSampleSeedlingsRaw - No auth token found');
+        print('getSampleCropBatchesRaw - No auth token found');
         throw Exception('Authentication token not found');
       }
 
-      final url = '${ApiConfig.baseUrl}$_seedlingsEndpoint/samples';
-      print('getSampleSeedlingsRaw - Making API request to $url');
+      final url = '${ApiConfig.baseUrl}$_cropBatchesEndpoint/samples';
+      print('getSampleCropBatchesRaw - Making API request to $url');
 
       final response = await http.get(
         Uri.parse(url),
@@ -64,28 +67,28 @@ class SeedlingService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body) as List<dynamic>;
-        print('getSampleSeedlingsRaw - Response data length: ${data.length}');
+        print('getSampleCropBatchesRaw - Response data length: ${data.length}');
         return data;
       } else {
-        print('getSampleSeedlingsRaw - Error response: ${response.body}');
-        throw Exception('Failed to load sample seedlings: ${response.body}');
+        print('getSampleCropBatchesRaw - Error response: ${response.body}');
+        throw Exception('Failed to load sample crop batches: ${response.body}');
       }
     } catch (e) {
-      print('getSampleSeedlingsRaw - Exception: $e');
-      throw e;
+      print('getSampleCropBatchesRaw - Exception: $e');
+      rethrow;
     }
   }
 
-  /// Get a seedling by ID
-  static Future<dynamic> getSeedlingByIdRaw(String id) async {
+  /// Get a crop batch by ID
+  static Future<dynamic> getCropBatchByIdRaw(String id) async {
     try {
       final token = await SecureStorage.getToken();
       if (token == null) {
         throw Exception('Authentication token not found');
       }
 
-      final url = '${ApiConfig.baseUrl}$_seedlingsEndpoint/$id';
-      print('Getting seedling with ID: $id from $url');
+      final url = '${ApiConfig.baseUrl}$_cropBatchesEndpoint/$id';
+      print('Getting crop batch with ID: $id from $url');
 
       final response = await http.get(
         Uri.parse(url),
@@ -98,24 +101,24 @@ class SeedlingService {
       if (response.statusCode == 200) {
         return json.decode(response.body);
       } else {
-        throw Exception('Failed to load seedling: ${response.body}');
+        throw Exception('Failed to load crop batch: ${response.body}');
       }
     } catch (e) {
-      print('Error in getSeedlingByIdRaw: $e');
-      throw e;
+      print('Error in getCropBatchByIdRaw: $e');
+      rethrow;
     }
   }
 
-  /// Create a new seedling
-  static Future<dynamic> createSeedlingRaw(Map<String, dynamic> data) async {
+  /// Create a new crop batch
+  static Future<dynamic> createCropBatchRaw(Map<String, dynamic> data) async {
     try {
       final token = await SecureStorage.getToken();
       if (token == null) {
         throw Exception('Authentication token not found');
       }
 
-      final url = '${ApiConfig.baseUrl}$_seedlingsEndpoint';
-      print('Creating seedling with data: $data at $url');
+      final url = '${ApiConfig.baseUrl}$_cropBatchesEndpoint';
+      print('Creating crop batch with data: $data at $url');
 
       final response = await http
           .post(
@@ -131,16 +134,16 @@ class SeedlingService {
       if (response.statusCode == 201) {
         return json.decode(response.body);
       } else {
-        throw Exception('Failed to create seedling: ${response.body}');
+        throw Exception('Failed to create crop batch: ${response.body}');
       }
     } catch (e) {
-      print('Error in createSeedlingRaw: $e');
-      throw e;
+      print('Error in createCropBatchRaw: $e');
+      rethrow;
     }
   }
 
-  /// Update a seedling
-  static Future<dynamic> updateSeedlingRaw(
+  /// Update a crop batch
+  static Future<dynamic> updateCropBatchRaw(
       String id, Map<String, dynamic> data) async {
     try {
       final token = await SecureStorage.getToken();
@@ -148,8 +151,8 @@ class SeedlingService {
         throw Exception('Authentication token not found');
       }
 
-      final url = '${ApiConfig.baseUrl}$_seedlingsEndpoint/$id';
-      print('Updating seedling $id with data: $data at $url');
+      final url = '${ApiConfig.baseUrl}$_cropBatchesEndpoint/$id';
+      print('Updating crop batch $id with data: $data at $url');
 
       final response = await http
           .put(
@@ -165,24 +168,94 @@ class SeedlingService {
       if (response.statusCode == 200) {
         return json.decode(response.body);
       } else {
-        throw Exception('Failed to update seedling: ${response.body}');
+        throw Exception('Failed to update crop batch: ${response.body}');
       }
     } catch (e) {
-      print('Error in updateSeedlingRaw: $e');
-      throw e;
+      print('Error in updateCropBatchRaw: $e');
+      rethrow;
     }
   }
 
-  /// Delete a seedling
-  static Future<dynamic> deleteSeedlingRaw(String id) async {
+  /// Transplant a crop batch
+  static Future<dynamic> transplantCropBatchRaw(
+      String id, Map<String, dynamic> transplantData) async {
     try {
       final token = await SecureStorage.getToken();
       if (token == null) {
         throw Exception('Authentication token not found');
       }
 
-      final url = '${ApiConfig.baseUrl}$_seedlingsEndpoint/$id';
-      print('Deleting seedling with ID: $id from $url');
+      final url = '${ApiConfig.baseUrl}$_cropBatchesEndpoint/$id/transplant';
+      print('Transplanting crop batch $id with data: $transplantData at $url');
+
+      final response = await http
+          .put(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: json.encode(transplantData),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        print('Failed to transplant crop batch: ${response.statusCode} ${response.body}');
+        throw Exception('Failed to transplant crop batch: ${response.body}');
+      }
+    } catch (e) {
+      print('Error in transplantCropBatchRaw: $e');
+      rethrow;
+    }
+  }
+
+  /// Harvest a crop batch
+  static Future<dynamic> harvestCropBatchRaw(
+    String id, Map<String, dynamic> harvestData) async {
+    try {
+      final token = await SecureStorage.getToken();
+      if (token == null) {
+        throw Exception('Authentication token not found');
+      }
+
+      final url = '${ApiConfig.baseUrl}$_cropBatchesEndpoint/$id/harvest';
+      print('Harvesting crop batch $id with data: $harvestData at $url');
+
+      final response = await http
+          .put(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: json.encode(harvestData),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        print('Failed to harvest crop batch: ${response.statusCode} ${response.body}');
+        throw Exception('Failed to harvest crop batch: ${response.body}');
+      }
+    } catch (e) {
+      print('Error in harvestCropBatchRaw: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete a crop batch
+  static Future<dynamic> deleteCropBatchRaw(String id) async {
+    try {
+      final token = await SecureStorage.getToken();
+      if (token == null) {
+        throw Exception('Authentication token not found');
+      }
+
+      final url = '${ApiConfig.baseUrl}$_cropBatchesEndpoint/$id';
+      print('Deleting crop batch with ID: $id from $url');
 
       final response = await http.delete(
         Uri.parse(url),
@@ -195,62 +268,11 @@ class SeedlingService {
       if (response.statusCode == 200) {
         return json.decode(response.body);
       } else {
-        throw Exception('Failed to delete seedling: ${response.body}');
+        throw Exception('Failed to delete crop batch: ${response.body}');
       }
     } catch (e) {
-      print('Error in deleteSeedlingRaw: $e');
-      throw e;
+      print('Error in deleteCropBatchRaw: $e');
+      rethrow;
     }
-  }
-
-  /// Count seedlings by stage
-  static Future<Map<String, int>> countSeedlingsByStage() async {
-    try {
-      final seedlings = await getAllSeedlingsRaw();
-      final Map<String, int> counts = {
-        'Seeding': 0,
-        'Germination': 0,
-        'Growing': 0,
-        'Harvested': 0,
-        'Total': seedlings.length,
-      };
-
-      for (final seedling in seedlings) {
-        final stage = seedling['stage'] ?? 'Unknown';
-        if (counts.containsKey(stage)) {
-          counts[stage] = counts[stage]! + 1;
-        }
-      }
-
-      return counts;
-    } catch (e) {
-      print('Error counting seedlings by stage: $e');
-      throw e;
-    }
-  }
-
-  // Alias methods for backward compatibility
-  static Future<List<dynamic>> getAllSeedlings() {
-    return getAllSeedlingsRaw();
-  }
-
-  static Future<List<dynamic>> getSampleSeedlings() {
-    return getSampleSeedlingsRaw();
-  }
-
-  static Future<dynamic> getSeedlingById(String id) {
-    return getSeedlingByIdRaw(id);
-  }
-
-  static Future<dynamic> createSeedling(Map<String, dynamic> data) {
-    return createSeedlingRaw(data);
-  }
-
-  static Future<dynamic> updateSeedling(String id, Map<String, dynamic> data) {
-    return updateSeedlingRaw(id, data);
-  }
-
-  static Future<dynamic> deleteSeedling(String id) {
-    return deleteSeedlingRaw(id);
   }
 }
