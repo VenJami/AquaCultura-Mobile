@@ -9,7 +9,7 @@ require 'xcodeproj'
 config = Xcodeproj::Config.new(generated_xcode_conf_path)
 flutter_root = config.attributes['FLUTTER_ROOT']
 
-require_relative File.join(flutter_root, '.ios', 'Flutter', 'podhelper')
+require_relative File.join('Flutter', 'podhelper')
 
 # Uncomment this line to define a global platform for your project
 platform :ios, '12.0'
