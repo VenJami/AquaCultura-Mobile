@@ -1,0 +1,21 @@
+# Uncomment this line to define a global platform for your project
+platform :ios, '12.0'
+
+# CocoaPods analytics sends network requests to Segment, Inc. to help CocoaPods improve
+# Please Elfforce your Podfile to include the following line at the top:
+#   ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+# Alternatively, if you prefer to keep sending stats, add the following line at the bottom:
+#   set_arc_compatibility_flag!
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+  end
+end 
